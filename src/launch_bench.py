@@ -1,15 +1,21 @@
-#!/usr/bin/env python3
-
 import argparse
-import subprocess
-import yaml
 import json
 import logging
-import uuid
-import time
 import docker
-from pathlib import Path
-from typing import Dict, List, Any, Optional
+from docker.models.containers import Container
+import os
+import requests
+import subprocess
+import time
+from typing import Dict, List, Any
+import uuid
+import yaml
+
+import coloredlogs
+coloredlogs.install()
+
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+BENCHMARK_TOOL_CMD = "inference-benchmarker"
 
 
 def setup_logging():
@@ -39,29 +45,24 @@ def parse_arguments() -> argparse.Namespace:
         help='Path to benchmark configuration file'
     )
     parser.add_argument(
-        '--scenario',
+        '--scenarios',
         type=str,
-        help='Specific scenario to run (if not specified, runs all scenarios)'
+        help='Specific scenarios to run, comma separated (i.e: "s1,s2,s3") (if not specified, runs all scenarios)',
+        default="all"
     )
     parser.add_argument(
-        '--engine',
+        '--engines',
         type=str,
-        help='Specific engine to test (if not specified, tests all engines)'
+        help='Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)',
+        default="all"
     )
-    parser.add_argument(
-        '--dry-run',
-        action='store_true',
-        help='Print commands that would be executed without running them'
-    )
+
     return parser.parse_args()
 
 
-def get_server_config_from_logs(container_name: str, engine_name: str, logger: logging.Logger) -> Dict[str, Any]:
+def get_server_config_from_logs(container: Container, engine_name: str, logger: logging.Logger) -> Dict[str, Any]:
     """Extract server configuration from Docker container logs for TGI, SGLang, and vLLM."""
-    try:
-        client = docker.from_env()
-        container = client.containers.get(container_name)
-        
+    try:  
         # Get more comprehensive logs
         logs = container.logs(tail=200).decode('utf-8')
         
@@ -209,47 +210,54 @@ def _parse_vllm_logs(logs: str) -> Dict[str, Any]:
     return config
 
 
-def launch_docker_engine(engine_name: str, engine_config: Dict[str, Any], 
-                        model: str, port: int, logger: logging.Logger) -> Optional[str]:
-    """Launch a Docker container for the specified engine."""
+def get_engine_config_dict(engine: Dict) -> Dict:
+    config = {}
+    config['image'] = engine.get('image')
+    config['name'] = engine.get('name', config['image'])
+    config['args'] = engine.get('args')
+    config['cmd'] = ' '.join([str(a) for a in config['args']])
+    environment = {}
+    envs = engine.get('envs')
+    if envs:
+        for env in envs:
+                if '=' in env:
+                    key, value = env.split('=', 1)
+                    environment[key] = value
+    
+    config['envs'] = environment
+    config['envs']['HF_TOKEN'] = HF_TOKEN
+    config['devices'] = engine.get('devices', [])
+
+    return config
+
+
+def launch_docker_engine(engine_name: str,
+                         engine_config: Dict[str, Any],
+                         port: int,
+                         logger: logging.Logger) -> Container:
     try:
-        client = docker.from_env()
-        
-        # Args are already resolved by YAML parser
-        args = engine_config.get('args', [])
-        
-        # Set up environment variables
-        environment = {}
-        for env in engine_config.get('envs', []):
-            if '=' in env:
-                key, value = env.split('=', 1)
-                environment[key] = value
-        
-        container_name = f"bench_{engine_name.lower()}_{int(time.time())}"
-        
+        container_name = f"bench_{engine_name.lower()}"
         logger.info(f"Starting {engine_name} container: {container_name}")
         
-        # Set up device requests (GPU support)
-        # NOTE: update for accepting cpu or mps.
+        # NOTE: update for supporting cpu and mps.
         device_requests = []
         if 'devices' in engine_config:
             device_config = engine_config['devices']
             if isinstance(device_config, str):
-                # Simple string format like "all" or "0,1"
                 device_ids = [device_config] if device_config == "all" else device_config.split(',')
                 device_requests = [
                     docker.types.DeviceRequest(device_ids=device_ids, capabilities=[["gpu"]])
                 ]
         else:
-            # Default: use all GPUs
             device_requests = [
                 docker.types.DeviceRequest(device_ids=["all"], capabilities=[["gpu"]])
             ]
 
+        client = docker.from_env()
         container = client.containers.run(
-            engine_config['image'],
-            command=' '.join(args) if args else None,
-            environment=environment,
+            image=engine_config.get('image'),
+            command=engine_config.get('cmd'),
+            environment=engine_config.get('envs'),
             ports={f'{port}/tcp': port},
             detach=True,
             name=container_name,
@@ -258,24 +266,19 @@ def launch_docker_engine(engine_name: str, engine_config: Dict[str, Any],
             device_requests=device_requests
         )
         
-        # Wait for container to be ready
-        time.sleep(10)
-        
-        return container_name
+        return container
         
     except Exception as e:
         logger.error(f"Failed to launch {engine_name}: {e}")
         return None
 
 
-def wait_for_server_ready(port: int, timeout: int = 60) -> bool:
+def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 300) -> bool:
     """Wait for the server to be ready to accept requests."""
-    import requests
-    import time
-    
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
+            logger.info(f"Waiting for engine to be ready...")
             response = requests.get(f"http://localhost:{port}/health", timeout=5)
             if response.status_code == 200:
                 return True
@@ -287,87 +290,57 @@ def wait_for_server_ready(port: int, timeout: int = 60) -> bool:
 
 
 def generate_unique_run_id() -> str:
-    """Generate a unique run ID for the benchmark."""
-    return f"run_{uuid.uuid4().hex[:8]}_{int(time.time())}"
+    return f"run_{uuid.uuid4().hex[:8]}"
 
 
-def run_benchmark(scenario_name: str, scenario_config: Dict[str, Any], 
-                 engine_name: str, run_id: str, server_config: Dict[str, Any],
-                 config: Dict[str, Any], logger: logging.Logger, 
-                 dry_run: bool = False) -> bool:
-    """Run the benchmark using inference-benchmarker command."""
+def run_benchmark(scenario_name: str,
+                  scenario_description: str,
+                  bench_args: List, 
+                  engine_name: str,
+                  engine_config: str,
+                  run_id: str,
+                  logger: logging.Logger):
     try:
-        # Build the command
-        cmd = ['inference-benchmarker']
-        
-        # Add benchmark configuration (YAML already resolved placeholders)
-        cmd.extend(scenario_config['bench_config'])
-        
-        # Add run ID
+        cmd = [BENCHMARK_TOOL_CMD]
+        cmd.extend(['--no-console']) # disable UI so the process doesn't get stuck when finished.
+        cmd.extend(bench_args)
         cmd.extend(['--run-id', run_id])
         
-        # Add metadata
-        metadata = {
-            'engine': engine_name,
-            'scenario': scenario_name,
-            'config': {
-                'model': config.get('model'),
-                'scenario_description': scenario_config.get('description', ''),
-                'server_config': server_config
-            }
-        }
-        
-        cmd.extend(['--extra-meta', json.dumps(metadata)])
+        metadata = f"engine={engine_name},scenario={scenario_name},scenario_description={scenario_description},engine_config={json.dumps(engine_config)}"
+        cmd.extend(['--extra-meta', metadata])
+
+        cmd = [str(c) for c in cmd]
         
         logger.info(f"Running benchmark: {' '.join(cmd)}")
+        proc = subprocess.run(cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=None,
+                        check=True)
         
-        if dry_run:
-            logger.info("DRY RUN: Would execute the above command")
-            return True
-        
-        # Execute the benchmark
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-        
-        if result.returncode == 0:
-            logger.info(f"Benchmark completed successfully for {engine_name} - {scenario_name}")
-            logger.debug(f"Benchmark output: {result.stdout}")
-            return True
-        else:
-            logger.error(f"Benchmark failed for {engine_name} - {scenario_name}")
-            logger.error(f"Error output: {result.stderr}")
-            return False
-            
-    except subprocess.TimeoutExpired:
-        logger.error(f"Benchmark timed out for {engine_name} - {scenario_name}")
-        return False
+        logger.info(f"Benchmark completed successfully for {engine_name} - {scenario_name}")
+        logger.info(proc.stdout)
     except Exception as e:
         logger.error(f"Error running benchmark for {engine_name} - {scenario_name}: {e}")
-        return False
 
 
-def cleanup_container(container_name: str, logger: logging.Logger):
-    """Clean up Docker container."""
+def cleanup_container(container: Container, logger: logging.Logger):
     try:
-        client = docker.from_env()
-        container = client.containers.get(container_name)
         container.stop(timeout=10)
         container.remove()
-        logger.info(f"Cleaned up container: {container_name}")
     except Exception as e:
-        logger.warning(f"Failed to cleanup container {container_name}: {e}")
+        logger.warning(f"Failed to cleanup container {container.name}: {e}")
 
 
 def main():
-    """Main execution function."""
     logger = setup_logging()
     args = parse_arguments()
     
     try:
-        # Load configuration
         config = load_bench_config(args.config)
+        print(config)
         logger.info(f"Loaded configuration from {args.config}")
         
-        # Get model and port from config
         model = config.get('model')
         port = config.get('port', 8000)
         
@@ -375,92 +348,91 @@ def main():
             logger.error("No model specified in configuration")
             return 1
         
-        # Filter scenarios if specified
-        scenarios_to_run = {}
-        if args.scenario:
-            if args.scenario in config['scenarios']:
-                scenarios_to_run[args.scenario] = config['scenarios'][args.scenario]
-            else:
-                logger.error(f"Scenario '{args.scenario}' not found in configuration")
-                return 1
-        else:
+        # Filter scenarios
+        scenarios_to_run = []
+        requested_scenarios = args.scenarios.split(',')
+        if requested_scenarios == ["all"]:
             scenarios_to_run = config['scenarios']
+        else:
+            for s in config['scenarios']:
+                if s['name'] in requested_scenarios:
+                    scenarios_to_run.append(s)
+        
+        if not scenarios_to_run:
+            logger.error("No scenarios to run.")
+            return 1
+        
+        logger.info(f"Running scenarios: {[s['name'] for s in scenarios_to_run]}")
         
         total_runs = 0
         successful_runs = 0
-        
-        # Run benchmarks for each scenario
-        for scenario_name, scenario_config in scenarios_to_run.items():
-            logger.info(f"Starting scenario: {scenario_name}")
-            logger.info(f"Description: {scenario_config.get('description', 'No description')}")
+        requested_engines = args.engines.split(',')
+        for scenario in scenarios_to_run:
+            logger.info(f"Starting scenario: {scenario['name']} - {scenario.get('description', 'No description')}")
+
+            scenario_run_id = generate_unique_run_id()
+            scenario_name = scenario.get('name', '')
+            scenario_description = scenario.get('description', '')
+            scenario_bench_args = scenario.get('bench_args')
             
-            # Filter engines if specified
-            engines_to_test = {}
-            if args.engine:
-                if args.engine in scenario_config['engines']:
-                    engines_to_test[args.engine] = scenario_config['engines'][args.engine]
-                else:
-                    logger.error(f"Engine '{args.engine}' not found in scenario '{scenario_name}'")
-                    continue
+            # Filter engines
+            engines_to_test = []
+            if requested_engines == ["all"]:
+                engines_to_test = scenario['engines']
             else:
-                engines_to_test = scenario_config['engines']
+                for e in scenario['engines']:
+                    if e['name'] in requested_engines:
+                        engines_to_test.append(e)
+
+            if engines_to_test:
+                logger.info(f"Running engines: {[e['name'] for e in engines_to_test]}")
+            else:
+                logger.error(f"Requested engine/s are not defined for scenario {scenario['name']}. Defined engines for scenario {scenario['name']}: {[e['name'] for e in scenario['engines']]}")
             
-            # Test each engine in the scenario
-            for engine_name, engine_config in engines_to_test.items():
+            for engine in engines_to_test:
                 total_runs += 1
-                run_id = generate_unique_run_id()
-                container_name = None
-                
                 try:
-                    logger.info(f"Testing {engine_name} for scenario {scenario_name}")
-                    
-                    # Launch Docker container for the engine
-                    if not args.dry_run:
-                        container_name = launch_docker_engine(
-                            engine_name, engine_config, model, port, logger
-                        )
-                        
-                        if not container_name:
-                            logger.error(f"Failed to launch {engine_name}")
-                            continue
-                        
-                        # Wait for server to be ready
-                        if not wait_for_server_ready(port):
-                            logger.error(f"Server {engine_name} failed to start properly")
-                            continue
-                        
-                        # Get server configuration from logs
-                        server_config = get_server_config_from_logs(container_name, engine_name, logger)
-                    else:
-                        server_config = {}
-                    
-                    # Run benchmark
-                    success = run_benchmark(
-                        scenario_name, scenario_config, engine_name, 
-                        run_id, server_config, config, logger, args.dry_run
+                    engine_name = engine['name']
+                    engine_config = get_engine_config_dict(engine)
+                    container = launch_docker_engine(
+                        engine_name=engine_name,
+                        engine_config=engine_config,
+                        port=port,
+                        logger=logger
                     )
                     
-                    if success:
-                        successful_runs += 1
+                    if not wait_for_server_ready(port, logger=logger):
+                        logger.error(f"Timeout - Server {engine_name} failed to start properly.")
+                        continue
+                    
+                    # Get server configuration from logs
+                    server_config={}
+                    # server_config = get_server_config_from_logs(container_name, engine_name, logger)
+                    
+                    # Run benchmark
+                    run_benchmark(
+                        scenario_name=scenario_name,
+                        scenario_description=scenario_description,
+                        bench_args=scenario_bench_args,
+                        engine_name=engine_name,
+                        engine_config=server_config,
+                        run_id=scenario_run_id,
+                        logger=logger
+                    )
                     
                 except Exception as e:
-                    logger.error(f"Error testing {engine_name} in {scenario_name}: {e}")
+                    logger.error(f"Error testing '{engine_name}' in '{scenario_name}': {e}")
                 
                 finally:
                     # Clean up container
-                    if container_name and not args.dry_run:
-                        cleanup_container(container_name, logger)
-                    
-                    # Brief pause between engine tests
-                    if not args.dry_run:
+                    if container:
+                        cleanup_container(container, logger)
                         time.sleep(5)
         
         # Summary
-        logger.info(f"Benchmark execution completed")
+        logger.info(f"Benchmark execution completed.")
         logger.info(f"Total runs: {total_runs}, Successful: {successful_runs}, Failed: {total_runs - successful_runs}")
-        
-        return 0 if successful_runs == total_runs else 1
-        
+                
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         return 1
