@@ -7,6 +7,7 @@ import os
 import requests
 import subprocess
 import time
+import threading
 from typing import Dict, List, Any
 import uuid
 import yaml
@@ -26,12 +27,10 @@ def setup_logging():
     )
     return logging.getLogger(__name__)
 
-
 def load_bench_config(config_path: str) -> Dict[str, Any]:
     """Load benchmark configuration from YAML file."""
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
-
 
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
@@ -56,9 +55,14 @@ def parse_arguments() -> argparse.Namespace:
         help='Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)',
         default="all"
     )
+    parser.add_argument(
+        '--show-logs',
+        action="store_true",
+        help="Show engine container logs."
+        
+    )
 
     return parser.parse_args()
-
 
 def get_server_config_from_logs(container: Container, engine_name: str, logger: logging.Logger) -> Dict[str, Any]:
     """Extract server configuration from Docker container logs for TGI, SGLang, and vLLM."""
@@ -81,7 +85,6 @@ def get_server_config_from_logs(container: Container, engine_name: str, logger: 
     except Exception as e:
         logger.warning(f"Failed to extract server config from logs: {e}")
         return {'engine': engine_name, 'error': str(e)}
-
 
 def _parse_tgi_logs(logs: str) -> Dict[str, Any]:
     """Parse TGI (Text Generation Inference) logs for configuration."""
@@ -120,7 +123,6 @@ def _parse_tgi_logs(logs: str) -> Dict[str, Any]:
             config['token_limits'] = line
     
     return config
-
 
 def _parse_sglang_logs(logs: str) -> Dict[str, Any]:
     """Parse SGLang logs for configuration."""
@@ -162,7 +164,6 @@ def _parse_sglang_logs(logs: str) -> Dict[str, Any]:
             config['server_args'] = line
     
     return config
-
 
 def _parse_vllm_logs(logs: str) -> Dict[str, Any]:
     """Parse vLLM logs for configuration."""
@@ -209,7 +210,6 @@ def _parse_vllm_logs(logs: str) -> Dict[str, Any]:
     
     return config
 
-
 def get_engine_config_dict(engine: Dict) -> Dict:
     config = {}
     config['image'] = engine.get('image')
@@ -229,7 +229,6 @@ def get_engine_config_dict(engine: Dict) -> Dict:
     config['devices'] = engine.get('devices', [])
 
     return config
-
 
 def launch_docker_engine(engine_name: str,
                          engine_config: Dict[str, Any],
@@ -272,7 +271,6 @@ def launch_docker_engine(engine_name: str,
         logger.error(f"Failed to launch {engine_name}: {e}")
         return None
 
-
 def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 300) -> bool:
     """Wait for the server to be ready to accept requests."""
     start_time = time.time()
@@ -288,10 +286,8 @@ def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 300)
     
     return False
 
-
 def generate_unique_run_id() -> str:
     return f"run_{uuid.uuid4().hex[:8]}"
-
 
 def run_benchmark(scenario_name: str,
                   scenario_description: str,
@@ -323,14 +319,30 @@ def run_benchmark(scenario_name: str,
     except Exception as e:
         logger.error(f"Error running benchmark for {engine_name} - {scenario_name}: {e}")
 
-
 def cleanup_container(container: Container, logger: logging.Logger):
     try:
-        container.stop(timeout=10)
+        container.stop(timeout=20)
         container.remove()
     except Exception as e:
         logger.warning(f"Failed to cleanup container {container.name}: {e}")
 
+def stream_container_logs(container_name):
+    def log_stream():
+        try:
+            process = subprocess.Popen(
+                ["docker", "logs", "-f", container_name],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+            )
+            for line in process.stdout:
+                print(f"[{container_name}] {line.rstrip()}")
+        except Exception as e:
+            print(f"Error streaming logs for {container_name}: {e}")
+
+    thread = threading.Thread(target=log_stream, daemon=True)
+    thread.start()
+    return thread
 
 def main():
     logger = setup_logging()
@@ -338,7 +350,6 @@ def main():
     
     try:
         config = load_bench_config(args.config)
-        print(config)
         logger.info(f"Loaded configuration from {args.config}")
         
         model = config.get('model')
@@ -400,6 +411,10 @@ def main():
                         port=port,
                         logger=logger
                     )
+
+                    logs_thread = None
+                    if args.show_logs:
+                        logs_thread = stream_container_logs(container.name)
                     
                     if not wait_for_server_ready(port, logger=logger):
                         logger.error(f"Timeout - Server {engine_name} failed to start properly.")
@@ -427,7 +442,8 @@ def main():
                     # Clean up container
                     if container:
                         cleanup_container(container, logger)
-                        time.sleep(5)
+                        if logs_thread:
+                            logs_thread.join()
         
         # Summary
         logger.info(f"Benchmark execution completed.")

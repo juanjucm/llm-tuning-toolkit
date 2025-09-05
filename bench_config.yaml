@@ -2,7 +2,7 @@ model: &model google/gemma-3-4b-it
 port: &port 8000
 
 scenarios:
-  - balanced-sweep:
+  - name: balanced
     description: Balanced scenario with a good compromise between concurrency and context length.
     bench_config:
       - --tokenizer-name *model
@@ -13,14 +13,14 @@ scenarios:
       - --duration "120s"
       - --warmup "30s"
     engines:
-      - vLLM:
+      - name: vLLM
         image: vllm/vllm-openai:latest
         args:
           - --model *model
           - --dtype bfloat16  
           - --max_model_len 8192 
           - --gpu_memory_utilization 0.9
-      - TGI:
+      - name: TGI
         image: ghcr.io/huggingface/text-generation-inference:3.2.3
         envs: 
           - PREFIX_CACHING=0
@@ -29,7 +29,7 @@ scenarios:
           - --dtype bfloat16 
           - --num-shard 1 
           - --max-total-tokens 8192 
-      - SGLang:
+      - name: SGLang
         image: lmsysorg/sglang:dev
         args:
           - python3 -m sglang.launch_server 
@@ -42,49 +42,80 @@ scenarios:
           - --mem-fraction-static 0.7 
           - --disable-overlap-schedule 
           - --enable-p2p-check  
-  - high_context:
+  - name: high-context
     description: High context scenario focused on testing long context handling capabilities.
     bench_config:
-      - --tokenizer-name *model
-      - --benchmark-kind sweep
-      - --max-vus 32
-      - --prompt-options "num_tokens=6000,min_tokens=4000,max_tokens=7500,variance=1000"
-      - --decode-options "num_tokens=512,min_tokens=256,max_tokens=1024,variance=128"
-      - --duration "180s"
-      - --warmup "45s"
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 256
+      - --prompt-options 
+      - "num_tokens=20000,min_tokens=4000,max_tokens=60000,variance=15000"
+      - --decode-options 
+      - "num_tokens=256,min_tokens=64,max_tokens=1024,variance=128"
+      - --duration 
+      - "100s"
+      - --warmup 
+      - "20s"
+      - --dataset-file 
+      - "classification.json"
     engines:
-      - vLLM:
+      - name: vLLM
         image: vllm/vllm-openai:latest
+        devices: "all"
         args:
-          - --model google/gemma-3-4b-it 
-          - --dtype bfloat16  
-          - --max_model_len 8192 
-          - --gpu_memory_utilization 0.85
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16  
+          - --max_model_len 
+          - 65536
+          - --gpu_memory_utilization 
+          - 0.90
           - --enable-chunked-prefill
-      - TGI:
+          - --max-num-seqs 
+          - 256
+      - name: TGI
         image: ghcr.io/huggingface/text-generation-inference:latest
         envs: 
           - PREFIX_CACHING=1
+        devices: "all"
         args:
-          - --model-id *model 
-          - --dtype bfloat16 
-          - --num-shard 1 
-          - --max-total-tokens 8192 
-          - --max-input-length 7500
-      - SGLang:
+          - --model-id 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --num-shard 
+          - 1 
+          - --max-total-tokens 
+          - 65536 
+          - --max-input-length 
+          - 60000
+          - --max-concurrent-requests 
+          - 256
+      - name: SGLang
         image: lmsysorg/sglang:dev
+        devices: "all"
         args:
           - python3 -m sglang.launch_server 
-          - --host 0.0.0.0 
-          - --port *port 
-          - --model-path *model 
-          - --dtype bfloat16 
-          - --context-length 8192 
+          - --host 
+          - 0.0.0.0 
+          - --port 
+          - *port 
+          - --model-path 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --context-length 
+          - 65536 
           - --disable-cuda-graph 
-          - --mem-fraction-static 0.8 
-          - --enable-overlap-schedule 
-          - --enable-p2p-check
-  - high_concurrency:
+          - --mem-fraction-static 
+          - 0.75
+          - --max-running-requests 
+          - 256
+  - name: high_concurrency
     description: High concurrency scenario focused on testing maximum throughput with many concurrent users.
     bench_config:
       - --tokenizer-name *model
@@ -95,7 +126,7 @@ scenarios:
       - --duration "240s"
       - --warmup "60s"
     engines:
-      - vLLM:
+      - name: vLLM
         image: vllm/vllm-openai:latest
         args:
           - --model google/gemma-3-4b-it 
@@ -104,7 +135,7 @@ scenarios:
           - --gpu_memory_utilization 0.95
           - --max-num-seqs 256
           - --enable-chunked-prefill
-      - TGI:
+      - name: TGI
         image: ghcr.io/huggingface/text-generation-inference:latest
         envs: 
           - PREFIX_CACHING=1
@@ -115,7 +146,7 @@ scenarios:
           - --max-total-tokens 4096 
           - --max-concurrent-requests 128
           - --max-batch-prefill-tokens 2048
-      - SGLang:
+      - name: SGLang
         image: lmsysorg/sglang:dev
         args:
           - python3 -m sglang.launch_server 
