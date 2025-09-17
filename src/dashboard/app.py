@@ -6,7 +6,7 @@ import click
 import gradio as gr
 import pandas as pd
 
-from parse_results import build_results
+from dashboard.parse_results import build_results
 
 
 @dataclass

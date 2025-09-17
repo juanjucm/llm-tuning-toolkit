@@ -35,7 +35,7 @@ def load_bench_config(config_path: str) -> Dict[str, Any]:
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Launch benchmarks based on configuration file"
+        description="Evaluate LLM serving engines for a certain LLM based on different benchmarking scenarios."
     )
     parser.add_argument(
         '--config', 
@@ -54,6 +54,12 @@ def parse_arguments() -> argparse.Namespace:
         type=str,
         help='Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)',
         default="all"
+    )
+    parser.add_argument(
+        '--save-dir',
+        type=str,
+        help='Directory to save benchmark results',
+        default="./results"
     )
     parser.add_argument(
         '--show-logs',
@@ -273,10 +279,10 @@ def launch_docker_engine(engine_name: str,
 
 def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 300) -> bool:
     """Wait for the server to be ready to accept requests."""
+    logger.info(f"Waiting for engine to be ready...")
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            logger.info(f"Waiting for engine to be ready...")
             response = requests.get(f"http://localhost:{port}/health", timeout=5)
             if response.status_code == 200:
                 return True
@@ -295,13 +301,15 @@ def run_benchmark(scenario_name: str,
                   engine_name: str,
                   engine_config: str,
                   run_id: str,
+                  save_dir: str,
                   logger: logging.Logger):
     try:
         cmd = [BENCHMARK_TOOL_CMD]
         cmd.extend(['--no-console']) # disable UI so the process doesn't get stuck when finished.
         cmd.extend(bench_args)
         cmd.extend(['--run-id', run_id])
-        
+        # cmd.extend(['--save-dir', save_dir])
+
         metadata = f"engine={engine_name},scenario={scenario_name},scenario_description={scenario_description},engine_config={json.dumps(engine_config)}"
         cmd.extend(['--extra-meta', metadata])
 
@@ -318,6 +326,8 @@ def run_benchmark(scenario_name: str,
         logger.info(proc.stdout)
     except Exception as e:
         logger.error(f"Error running benchmark for {engine_name} - {scenario_name}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
 
 def cleanup_container(container: Container, logger: logging.Logger):
     try:
@@ -384,7 +394,7 @@ def main():
             scenario_run_id = generate_unique_run_id()
             scenario_name = scenario.get('name', '')
             scenario_description = scenario.get('description', '')
-            scenario_bench_args = scenario.get('bench_args')
+            scenario_bench_args = scenario.get('bench_config', [])
             
             # Filter engines
             engines_to_test = []
@@ -432,6 +442,7 @@ def main():
                         engine_name=engine_name,
                         engine_config=server_config,
                         run_id=scenario_run_id,
+                        save_dir=args.save_dir,
                         logger=logger
                     )
                     
@@ -441,6 +452,7 @@ def main():
                 finally:
                     # Clean up container
                     if container:
+                        successful_runs += 1
                         cleanup_container(container, logger)
                         if logs_thread:
                             logs_thread.join()
@@ -452,7 +464,3 @@ def main():
     except Exception as e:
         logger.error(f"Fatal error: {e}")
         return 1
-
-
-if __name__ == "__main__":
-    exit(main())

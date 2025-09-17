@@ -1,47 +1,72 @@
-model: &model google/gemma-3-4b-it
+model: &model meta-llama/Meta-Llama-3.1-8b-Instruct
 port: &port 8000
 
 scenarios:
   - name: balanced
     description: Balanced scenario with a good compromise between concurrency and context length.
     bench_config:
-      - --tokenizer-name *model
-      - --benchmark-kind sweep
-      - --max-vus 128
-      - --prompt-options "num_tokens=1500,min_tokens=100,max_tokens=8000,variance=500"
-      - --decode-options "num_tokens=192,min_tokens=192,max_tokens=192,variance=0"
-      - --duration "120s"
-      - --warmup "30s"
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 128
+      - --prompt-options 
+      - "num_tokens=1500,min_tokens=100,max_tokens=8000,variance=500"
+      - --decode-options 
+      - "num_tokens=192,min_tokens=192,max_tokens=192,variance=0"
+      - --duration 
+      - "120s"
+      - --warmup 
+      - "30s"
     engines:
       - name: vLLM
         image: vllm/vllm-openai:latest
+        devices: "all"
         args:
-          - --model *model
-          - --dtype bfloat16  
-          - --max_model_len 8192 
-          - --gpu_memory_utilization 0.9
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16  
+          - --max_model_len 
+          - 8192 
+          - --gpu_memory_utilization 
+          - 0.95
       - name: TGI
-        image: ghcr.io/huggingface/text-generation-inference:3.2.3
-        envs: 
-          - PREFIX_CACHING=0
+        image: ghcr.io/huggingface/text-generation-inference:latest
+        devices: "all"
         args:
-          - --model-id *model 
-          - --dtype bfloat16 
-          - --num-shard 1 
-          - --max-total-tokens 8192 
+          - --model-id 
+          - *model 
+          - --port
+          - *port
+          - --dtype 
+          - bfloat16 
+          - --num-shard 
+          - 1 
+          - --max-total-tokens 
+          - 8192
+          - --max-input-tokens
+          - 8000
+          - --max-batch-prefill-tokens
+          - 16182
       - name: SGLang
         image: lmsysorg/sglang:dev
+        devices: "all"
         args:
           - python3 -m sglang.launch_server 
-          - --host 0.0.0.0 
-          - --port *port 
-          - --model-path *model 
-          - --dtype bfloat16 
-          - --context-length 8192 
-          - --disable-cuda-graph 
-          - --mem-fraction-static 0.7 
-          - --disable-overlap-schedule 
-          - --enable-p2p-check  
+          - --host 
+          - 0.0.0.0 
+          - --port 
+          - *port 
+          - --model-path 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --context-length 
+          - 8192 
+          - --mem-fraction-static 
+          - 0.7 
   - name: high-context
     description: High context scenario focused on testing long context handling capabilities.
     bench_config:
@@ -50,7 +75,7 @@ scenarios:
       - --benchmark-kind 
       - sweep
       - --max-vus 
-      - 256
+      - 512
       - --prompt-options 
       - "num_tokens=20000,min_tokens=4000,max_tokens=60000,variance=15000"
       - --decode-options 
@@ -118,46 +143,68 @@ scenarios:
   - name: high_concurrency
     description: High concurrency scenario focused on testing maximum throughput with many concurrent users.
     bench_config:
-      - --tokenizer-name *model
-      - --benchmark-kind sweep
-      - --max-vus 512
-      - --prompt-options "num_tokens=800,min_tokens=200,max_tokens=1500,variance=300"
-      - --decode-options "num_tokens=128,min_tokens=64,max_tokens=256,variance=32"
-      - --duration "240s"
-      - --warmup "60s"
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 800
+      - --prompt-options 
+      - "num_tokens=1024,min_tokens=100,max_tokens=1864,variance=500"
+      - --decode-options 
+      - "num_tokens=100,min_tokens=50,max_tokens=192,variance=50"
+      - --duration 
+      - "120s"
+      - --warmup 
+      - "30"
     engines:
       - name: vLLM
         image: vllm/vllm-openai:latest
         args:
-          - --model google/gemma-3-4b-it 
-          - --dtype bfloat16  
-          - --max_model_len 4096 
-          - --gpu_memory_utilization 0.95
-          - --max-num-seqs 256
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16 
+          - --max_model_len 
+          - 2056
+          - --gpu_memory_utilization 
+          - 0.95
+          - --max-num-seqs 
+          - 2056
           - --enable-chunked-prefill
+          - --enable-prefill-caching
       - name: TGI
         image: ghcr.io/huggingface/text-generation-inference:latest
         envs: 
           - PREFIX_CACHING=1
         args:
-          - --model-id *model 
-          - --dtype bfloat16 
-          - --num-shard 1 
-          - --max-total-tokens 4096 
-          - --max-concurrent-requests 128
-          - --max-batch-prefill-tokens 2048
+          - --model-id 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --num-shard 
+          - 1 
+          - --max-total-tokens 
+          - 4096 
+          - --max-concurrent-requests 
+          - 1024
+          - --max-batch-prefill-tokens 
+          - 2048
       - name: SGLang
         image: lmsysorg/sglang:dev
         args:
           - python3 -m sglang.launch_server 
-          - --host 0.0.0.0 
-          - --port *port 
-          - --model-path *model 
-          - --dtype bfloat16 
-          - --context-length 4096 
+          - --host 
+          - 0.0.0.0 
+          - --port 
+          - *port 
+          - --model-path 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --context-length 
+          - 4096 
           - --enable-cuda-graph 
-          - --mem-fraction-static 0.6 
-          - --enable-overlap-schedule 
-          - --enable-p2p-check 
-          - --schedule-policy fcfs
+          - --mem-fraction-static 
+          - 0.7
 
