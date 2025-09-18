@@ -1,0 +1,43 @@
+model: &model "meta-llama/Meta-Llama-3.1-8b-Instruct"
+port: &port 8000
+host: 0.0.0.0
+
+# Goodput SLOs - configuration must meet these requirements
+goodput_thresholds:
+  max_e2e_latency_ms: 10000
+  max_ttft_ms: 2000
+  min_success_rate: 0.95
+  max_inter_token_latency_ms: 100
+
+# scenario bench configuration
+scneario:
+  name: "balanced"
+  prompt_options: "num_tokens=4000,min_tokens=4000,max_tokens=4000,variance=0"
+  decode_options: "num_tokens=16,min_tokens=16,max_tokens=16,variance=0"
+  dataset_file: null  # optional dataset file, set to null for random
+  throughput_duration: "60s"
+  rate_duration: "60s"
+  max_vus: 512
+  max_model_len: &max_model_len 4096
+
+# Engine to test and its parameter pool (only one engine at a time)
+engine:
+  name: "vllm"
+  image: "vllm/vllm-openai:latest"
+  base_args:
+    - "--model"
+    - *model
+    - --port
+    - *port
+    - "--dtype"
+    - "bfloat16"
+    - "--max-model-len"
+    - *max_model_len
+    - "--gpu-memory-utilization"
+    - "0.95"
+  param_pool:
+    # Value parameters (--param value)
+    max_num_seqs: [128, 256]
+    max_num_batched_tokens: [4096]
+    # Action parameters (flags that can be included or excluded)
+    enable_prefix_caching: [true, false]
