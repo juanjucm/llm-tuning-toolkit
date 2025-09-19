@@ -35,9 +35,10 @@ engine:
     - *max_model_len
     - "--gpu-memory-utilization"
     - "0.95"
-  param_pool:
+  value_args_pool:
     # Value parameters (--param value)
-    max_num_seqs: [128, 256]
-    max_num_batched_tokens: [4096]
+    max-num-seqs: [128, 256]
+    max-num-batched-tokens: [4096]
+  action_args_pool:
     # Action parameters (flags that can be included or excluded)
-    enable_prefix_caching: [true, false]
+    enable-chunked-prefill: [true, false]

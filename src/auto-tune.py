@@ -1,14 +1,3 @@
-#!/usr/bin/env python3
-"""
-Auto-tune script for optimizing server parameters to maximize throughput while meeting goodput requirements.
-
-Based on auto-tune-config.yaml and inspired by auto_tune.sh process:
-1. Perform throughput benchmark to get max throughput
-2. Parse results to access benchmark metrics
-3. If goodput thresholds are not met, launch rate benchmark with decreasing rates until goodput is reached
-4. After iterating over all parameters, dump best configuration
-"""
-
 import argparse
 import json
 import logging
@@ -32,12 +21,25 @@ HF_TOKEN = os.getenv("HF_TOKEN", "")
 BENCHMARK_TOOL_CMD = "inference-benchmarker"
 
 
+parser = argparse.ArgumentParser(description="Auto-tune tool for finding optimal engine parameters.")
+parser.add_argument(
+        "--config", 
+        default="src/benchmarker/auto-tune-config.yaml",
+        help="Path to auto-tune configuration file"
+)
+parser.add_argument(
+        "--result-dir",
+        default="auto_tune_results",
+        help="Directory to save tuning results"
+)
+
+
 class AutoTuner:
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, result_dir: str):
         self.config_path = config_path
         self.config = self._load_config()
         self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-        self.results_dir = Path(f"auto_tune_results_{self.timestamp}")
+        self.results_dir = Path(result_dir)
         self.results_dir.mkdir(exist_ok=True)
         
         # Set up logging
@@ -71,24 +73,26 @@ class AutoTuner:
         return f"autotune_{uuid.uuid4().hex[:8]}"
     
     def _build_engine_args(self, param_config: Dict) -> List[str]:
-        """Build engine arguments from configuration"""
-        engine_config = self.config['engine']
-        args = list(engine_config['base_args'])
+        """Build engine arguments from configuration
+        """
+        # TODO: move this outside to avoid rebuilding every time
+        # Like, define base args in the main loop or something and just append params here.
+        args = list(self.config['engine']['base_args'])
         
-        # Add value parameters
-        for param, value in param_config.items():
-            if param in ['enable_prefix_caching', 'enable_chunked_prefill']:
-                # Boolean flags
-                if value:
-                    args.append(f"--{param.replace('_', '-')}")
-            else:
-                # Value parameters
-                args.extend([f"--{param.replace('_', '-')}", str(value)])
+        # Handle value arguments (--param value)
+        for param, value in param_config.get('value_args', {}).items():
+            args.extend([f"--{param.replace('_', '-')}", str(value)])
+        
+        # Handle action arguments (boolean flags)
+        for param, value in param_config.get('action_args', {}).items():
+            if value:
+                args.append(f"--{param.replace('_', '-')}")
         
         return args
     
     def _launch_docker_engine(self, param_config: Dict) -> Optional[docker.models.containers.Container]:
-        """Launch Docker container with the engine"""
+        """Launch a Docker container running the engine
+        """
         try:
             engine_config = self.config['engine']
             engine_args = self._build_engine_args(param_config)
@@ -97,7 +101,6 @@ class AutoTuner:
             container_name = f"autotune_engine_{int(time.time())}"
             self.logger.info(f"Starting engine container: {container_name}")
             
-            # Setup GPU device requests
             device_requests = [
                 docker.types.DeviceRequest(device_ids=["all"], capabilities=[["gpu"]])
             ]
@@ -184,13 +187,9 @@ class AutoTuner:
             return False
     
     def _find_latest_results_file(self, run_id: str) -> Optional[Path]:
-        """Find the latest results file for a given run_id"""
-        results_dir = Path("./results")
-        if not results_dir.exists():
-            return None
-        
-        # Look for JSON files containing the run_id
-        for json_file in results_dir.glob("*.json"):
+        """Find the latest results file for a given run_id
+        """
+        for json_file in self.results_dir.glob("*.json"):
             try:
                 with open(json_file, 'r') as f:
                     data = json.load(f)
@@ -202,7 +201,8 @@ class AutoTuner:
         return None
     
     def _run_throughput_benchmark(self) -> Optional[Dict]:
-        """Run throughput benchmark to discover maximum throughput"""
+        """Run throughput benchmark to discover maximum throughput
+        """
         self.logger.info("Running throughput benchmark...")
         
         scenario = self.config['scneario']
@@ -218,6 +218,7 @@ class AutoTuner:
             '--prompt-options', scenario['prompt_options'],
             '--decode-options', scenario['decode_options'],
             '--tokenizer-name', self.config['model'],
+            '--output-path', self.results_dir.joinpath(Path(f"throughput_{run_id}.json")).as_posix()
         ]
         
         if scenario.get('dataset_file'):
@@ -373,20 +374,35 @@ class AutoTuner:
         return best_rate, best_metrics
     
     def _generate_parameter_combinations(self) -> List[Dict]:
-        """Generate all parameter combinations to test"""
-        param_pool = self.config['engine']['param_pool']
+        """Generate all parameter combinations to test
+        """
+        engine_config = self.config['engine']
+        value_args_pool = engine_config.get('value_args_pool', {})
+        action_args_pool = engine_config.get('action_args_pool', {})
         
-        # Get all parameter names and their values
-        param_names = list(param_pool.keys())
-        param_values = [param_pool[name] for name in param_names]
+        # Get parameter names and values for each type
+        value_param_names = list(value_args_pool.keys())
+        value_param_values = [value_args_pool[name] for name in value_param_names]
+        
+        action_param_names = list(action_args_pool.keys())
+        action_param_values = [action_args_pool[name] for name in action_param_names]
         
         # Generate all combinations
         combinations = []
-        for values in product(*param_values):
-            combination = dict(zip(param_names, values))
-            combinations.append(combination)
         
-        self.logger.info(f"Generated {len(combinations)} parameter combinations to test")
+        # Generate combinations for value params (or empty if none)
+        value_combinations = list(product(*value_param_values)) if value_param_values else [()]
+        action_combinations = list(product(*action_param_values)) if action_param_values else [()]
+        
+        for value_combo in value_combinations:
+            for action_combo in action_combinations:
+                combination = {
+                    'value_args': dict(zip(value_param_names, value_combo)) if value_param_names else {},
+                    'action_args': dict(zip(action_param_names, action_combo)) if action_param_names else {}
+                }
+                combinations.append(combination)
+        
+        self.logger.info(f"Generated {len(combinations)} parameter combinations to test.")
         return combinations
     
     def run_auto_tune(self) -> Dict:
@@ -397,8 +413,7 @@ class AutoTuner:
         # Generate parameter combinations
         param_combinations = self._generate_parameter_combinations()
         all_results = []
-        
-        # Main loop: iterate over parameter combinations
+
         for i, param_config in enumerate(param_combinations, 1):
             self.logger.info(f"\n{'='*60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
@@ -406,13 +421,11 @@ class AutoTuner:
             
             container = None
             try:
-                # Step 1: Launch Docker container with current parameters
+                # TODO: save logs to debug if needed
                 container = self._launch_docker_engine(param_config)
                 if not container:
-                    self.logger.error("Failed to start container")
                     continue
                 
-                # Step 2: Wait for server to be ready
                 if not self._wait_for_server_ready(self.config['port']):
                     self.logger.error("Server failed to start properly")
                     continue
@@ -516,36 +529,12 @@ class AutoTuner:
         }
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Auto-tune server parameters for optimal throughput")
-    parser.add_argument(
-        "--config", 
-        default="src/benchmarker/auto-tune-config.yaml",
-        help="Path to auto-tune configuration file"
-    )
-    
+def main() -> None :
     args = parser.parse_args()
     
     if not os.path.exists(args.config):
         print(f"Error: Configuration file not found: {args.config}")
         sys.exit(1)
     
-    try:
-        tuner = AutoTuner(args.config)
-        results = tuner.run_auto_tune()
-        
-        if results['best_config']:
-            sys.exit(0)
-        else:
-            print("No configuration met requirements")
-            sys.exit(1)
-            
-    except Exception as e:
-        print(f"Error during auto-tuning: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+    tuner = AutoTuner(args.config, args.result_dir)
+    tuner.run_auto_tune()
