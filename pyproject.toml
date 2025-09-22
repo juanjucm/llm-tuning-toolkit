@@ -90,6 +90,7 @@ dependencies = [
 [project.scripts]
 benchmarker = "benchmarker.launch_bench:main"
 dashboard = "dashboard.app:main"
+auto-tune = "auto_tune.auto_tune:main"
 
 [tool.ruff]
 line-length = 112

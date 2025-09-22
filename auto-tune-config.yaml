@@ -2,23 +2,35 @@ model: &model "meta-llama/Meta-Llama-3.1-8b-Instruct"
 port: &port 8000
 host: 0.0.0.0
 
-# Goodput SLOs - configuration must meet these requirements
-goodput_thresholds:
-  max_e2e_latency_ms: 10000
-  max_ttft_ms: 2000
-  min_success_rate: 0.95
-  max_inter_token_latency_ms: 100
-
-# scenario bench configuration
-scneario:
+# scenario auto-tuning configuration
+scenario:
   name: "balanced"
   prompt_options: "num_tokens=4000,min_tokens=4000,max_tokens=4000,variance=0"
   decode_options: "num_tokens=16,min_tokens=16,max_tokens=16,variance=0"
   dataset_file: null  # optional dataset file, set to null for random
   throughput_duration: "60s"
   rate_duration: "60s"
+  max_rate_finding_attempts: 5
+  rate_decrease_factor: 0.15
   max_vus: 512
   max_model_len: &max_model_len 4096
+  goodput_thresholds:
+    # Goodput SLOs - Performance requirements to meet for this scenario.
+    # Auto-Tuning goal is to find highest throughput configuration that meet these SLOs.
+    # Available values to check:
+    #   max_e2e_avg_ms
+    #   max_e2e_p99_ms
+    #   max_ttft_avg_ms
+    #   max_ttft_p99_ms
+    #   max_itl_avg_ms
+    #   max_itl_p99_ms
+    #   min_success_rate
+    #   min_throughput (req/s)
+    # If not specified, no check is done for that metric.
+    max_e2e_avg_ms: 10000
+    max_ttft_avg_ms: 2000
+    min_success_rate: 0.95
+    max_itl_avg_ms: 100
 
 # Engine to test and its parameter pool (only one engine at a time)
 engine:
