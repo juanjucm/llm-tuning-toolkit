@@ -66,7 +66,8 @@ class AutoTuner:
         return config
     
     def _build_engine_args(self, param_config: Dict) -> List[str]:
-        """Build engine arguments from configuration
+        """
+        Build engine arguments from configuration
         """
         args = list(self.config['engine']['base_args'])
         
@@ -170,9 +171,7 @@ class AutoTuner:
             self.logger.error(f"Error running benchmark: {e}")
             raise e
 
-    def _get_metrics_from_results(self,
-                                  results_dict: Dict,
-                                  mode: str='throughput') -> Dict:
+    def _get_metrics_from_results(self, results_dict: Dict) -> Dict:
         """
         Extract key metrics from benchmark results.
         Results format expected to match inference-benchmarker output. Only one result should be present
@@ -180,18 +179,12 @@ class AutoTuner:
         
         Args:
             results_dict (Dict): Parsed JSON results from benchmark.
-            mode (str): Benchmark mode, either 'throughput' or 'rate'. To take results from.
         Returns:
             Dict: Extracted metrics including throughput, latencies, success rates, etc.
         """
         metrics = {}
         results = results_dict.get('results', [])
-        for r in results:
-            if mode in r['id']:
-                result = r
-                break
-        if not result:
-            return {}
+        result = results[-1] if results else {}  # NOTE: following inference-benchmarker output logs format, take last result (skip warmup)
         
         # Throughput and success metrics
         metrics['throughput'] = result.get('request_rate', 0)
@@ -236,13 +229,13 @@ class AutoTuner:
     def _run_throughput_benchmark(self,
                                   run_id: str,
                                   output_folder: str,
-                                  engine_config: Dict) -> Optional[Dict]:
+                                  engine_config: str) -> Optional[Dict]:
         """Run throughput benchmark to discover maximum throughput
 
         Args:
             run_id (str): Unique identifier for this benchmark run. Will be used for results file naming.
             output_folder (str): Directory to save benchmark results.
-            engine_config (Dict): Current engine parameter configuration being tested.
+            engine_config (str): Current docker engine command.
         Returns:
             Optional[Dict]: Parsed benchmark results or None if failed.
         """
@@ -268,7 +261,7 @@ class AutoTuner:
         if scenario.get('dataset_file'):
             bench_args.extend(['--dataset-file', scenario['dataset_file']])
 
-        metadata = f"scenario={scenario},autotune=true,engine={self.config['engine']['name']},engine_config={json.dumps(engine_config)}"
+        metadata = f"autotune=true,engine_name={self.config['engine']['name']},docker_engine_args={engine_config}"
         bench_args.extend(['--extra-meta', metadata])
 
         try:
@@ -296,14 +289,14 @@ class AutoTuner:
                             rate: float,
                             run_id: str,
                             output_folder: str,
-                            engine_config: Dict) -> Optional[Dict]:
+                            engine_config: str) -> Optional[Dict]:
         """
         Run rate benchmark with specific request rate.
         Args:
             rate (float): Request rate in requests per second.
             run_id (str): Unique identifier for this benchmark run. Will be used for results file
             output_folder (str): Directory to save benchmark results.
-            engine_config (Dict): Current engine parameter configuration being tested.
+            engine_config (str): Current docker engine command.
         Returns:
             Optional[Dict]: Parsed benchmark results or None if failed.
         """
@@ -311,7 +304,7 @@ class AutoTuner:
 
         scenario = self.config['scenario']
         port = self.config['port']
-        output_file = os.path.join(output_folder, f"rate_@{rate}_{run_id}.json")
+        output_file = os.path.join(output_folder, f"rate_@{rate:.2f}_{run_id}.json")
         
         # Build benchmark arguments for rate test
         bench_args = [
@@ -330,7 +323,7 @@ class AutoTuner:
         if scenario.get('dataset_file'):
             bench_args.extend(['--dataset-file', scenario['dataset_file']])
 
-        metadata = f"scenario={scenario},autotune=true,engine={self.config['engine']['name']},engine_config={json.dumps(engine_config)}"
+        metadata = f"autotune=true,engine_name={self.config['engine']['name']},docker_engine_args={engine_config}"
         bench_args.extend(['--extra-meta', metadata])
 
         try:
@@ -363,7 +356,7 @@ class AutoTuner:
         Returns:
             Tuple[List[Dict], bool]: List of threshold checks and overall meets status.
         """
-        thresholds = self.config['scenario']['goodput_thresholds']
+        thresholds = self.config['scenario']['goodput_criteria']
         
         # for each metric in metrics, check if a threshold exists and check if reached
         results = []
@@ -401,7 +394,6 @@ class AutoTuner:
             # Sleep between rate tests to let any pending requests clear
             time.sleep(3)
 
-            self.logger.info(f"Testing with rate: {rate:.2f} req/s")
             metrics = self._run_rate_benchmark(
                 rate=rate,
                 run_id=run_id,
@@ -459,13 +451,12 @@ class AutoTuner:
         self.logger.info(f"Generated {len(combinations)} parameter combinations to test for engine {engine_config['name']}.")
 
         return combinations
-    
+   
     def run_auto_tune(self) -> Dict:
-        """Run the complete auto-tuning process"""
+        """Run the auto-tuning process"""
         # TODO: implement verbose/normal logging levels.
         auto_tune_run_id = uuid.uuid4().hex[:6]
         self.logger.info(f"Starting auto-tune process with ID: {auto_tune_run_id}...")
-        self.logger.info(f"Results will be saved to: {self.results_dir}")
 
         # TODO: extend to support multiple engine auto-tuning if needed.
         # Probably outside of this method, like in main() or something.
@@ -494,8 +485,10 @@ class AutoTuner:
                 if not self._wait_for_server_ready(self.config['port']):
                     self.logger.error("Server failed to start properly")
                     continue
-                
-                metrics = self._run_throughput_benchmark(run_id, engine_path.as_posix(), engine_args)
+
+                metrics = self._run_throughput_benchmark(run_id=run_id,
+                                                         output_folder=engine_path.as_posix(),
+                                                         engine_config=' '.join([str(a) for a in engine_args]))
                 if not metrics:
                     self.logger.error("Failed to run throughput benchmark, continuing to next config...")
                     continue
@@ -506,13 +499,12 @@ class AutoTuner:
                 self.logger.info("Goodput SLOs checks:")
                 self.logger.info(json.dumps(goodput_checks, indent=2))
                 self.logger.info(f"{'='*60}")
-
                 if not meets:
                     self.logger.info("Goodput criteria not met, finding optimal rate for this config...")
                     metrics, goodput_checks = self._find_optimal_rate(metrics['throughput'],
-                                                                         run_id,
-                                                                         engine_path.as_posix(),
-                                                                         engine_args)
+                                                                      run_id=run_id,
+                                                                      output_folder=engine_path.as_posix(),
+                                                                      engine_config=' '.join([str(a) for a in engine_args]))
                     if not metrics:
                         self.logger.info("Goodput criteria not met. No optimal rate found for this configuration. Continuing...")
                         continue
@@ -529,8 +521,8 @@ class AutoTuner:
                 
                 # Update best configuration if this is better
                 if metrics['throughput'] > self.best_throughput:
-                    self.logger.info(f"NEW BEST CONFIG! Throughput: {self.best_throughput:.2f} req/s")
                     self.best_throughput = metrics['throughput']
+                    self.logger.info(f"NEW BEST CONFIG! Throughput: {self.best_throughput:.2f} req/s")
                     result['is_best'] = True
 
                 all_results.append(result) 
@@ -547,7 +539,7 @@ class AutoTuner:
             json.dump({
                 'timestamp': self.timestamp,
                 'config_file': self.config_path,
-                'goodput_thresholds': self.config['goodput_thresholds'],
+                'goodput_criteria': self.config['goodput_criteria'],
                 'all_results': all_results
             }, f, indent=2)
         

@@ -14,7 +14,7 @@ scenario:
   rate_decrease_factor: 0.15
   max_vus: 512
   max_model_len: &max_model_len 4096
-  goodput_thresholds:
+  goodput_criteria:
     # Goodput SLOs - Performance requirements to meet for this scenario.
     # Auto-Tuning goal is to find highest throughput configuration that meet these SLOs.
     # Available values to check:
@@ -28,9 +28,9 @@ scenario:
     #   min_throughput (req/s)
     # If not specified, no check is done for that metric.
     max_e2e_avg_ms: 10000
-    max_ttft_avg_ms: 2000
+    max_ttft_avg_ms: 20000
     min_success_rate: 0.95
-    max_itl_avg_ms: 100
+    max_itl_avg_ms: 1000
 
 # Engine to test and its parameter pool (only one engine at a time)
 engine:
@@ -49,8 +49,8 @@ engine:
     - "0.95"
   value_args_pool:
     # Value parameters (--param value)
-    max-num-seqs: [128, 256]
+    max-num-seqs: [128, 1024]
     max-num-batched-tokens: [4096]
   action_args_pool:
     # Action parameters (flags that can be included or excluded)
-    enable-chunked-prefill: [true, false]
+    enable-chunked-prefill: [true]
