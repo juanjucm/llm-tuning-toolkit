@@ -2,6 +2,8 @@
 
 Toolkit for automatic tuning and benchmarking of LLM serving configurations.
 
+**NOTE: check TODO.md for WIP**
+
 ## Prerequisites
 
 This project requires `inference-benchmarker`. Install it using:
