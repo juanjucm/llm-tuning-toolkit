@@ -31,7 +31,7 @@ This module provides a way to automatically detect the best LLM serving configur
 
 For running the script, make sure to provide a valid config yaml. Take a loot at `auto-tune-config.yaml` to check the format and expected parameters.
 
-```concole
+```console
 usage: uv run auto-tune [-h] [--config CONFIG] [--result-dir RESULT_DIR]
 
 Auto-tune tool for finding optimal engine parameters.
@@ -60,7 +60,7 @@ options:
   --engines ENGINES     Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)
   --save-dir SAVE_DIR   Directory to save benchmark results
   --show-logs           Show engine container logs.
-  ```
+```
 
 ## Dashboard Usage
 
