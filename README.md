@@ -1,6 +1,6 @@
-# LLM Auto-Tuner ⚙️
+# LLM Tunning Toolkit ⚙️
 
-Evaluate LLM serving engines for a certain LLM based on different benchmarking scenarios.
+Toolkit for automatic tuning and benchmarking of LLM serving configurations.
 
 ## Prerequisites
 

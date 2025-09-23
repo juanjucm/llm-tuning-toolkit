@@ -2,7 +2,7 @@ import argparse
 import os
 import sys
 
-from auto_tune import AutoTuner
+from auto_tune.tuner import AutoTuner
 
 parser = argparse.ArgumentParser(description="Auto-tune tool for finding optimal engine parameters.")
 parser.add_argument("--config", default="./auto-tune-config.yaml", help="Path to auto-tune configuration file")

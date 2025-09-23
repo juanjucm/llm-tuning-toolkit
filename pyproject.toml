@@ -1,7 +1,7 @@
 [project]
-name = "auto-tuner"
+name = "llm-tuning-toolkit"
 version = "0.1.0"
-description = "Automatic tunning tool for LLM parameters."
+description = "Toolkit for automatic tuning and benchmarking of LLM serving configurations."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 # TODO: fix this. It doesn't load the benchmark correctly if these are not the exact dependencies.
@@ -84,9 +84,9 @@ dependencies = [
 ]
 
 [project.scripts]
-benchmarker = "benchmarker.launch_bench:main"
+multi-benchmarker = "benchmarker.launch_bench:main"
 dashboard = "dashboard.app:main"
-auto-tune = "auto_tune.auto_tune:main"
+auto-tune = "auto_tune.cli:main"
 
 [tool.ruff]
 line-length = 112
