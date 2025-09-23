@@ -1,7 +1,7 @@
 [project]
-name = "benchmarker"
+name = "auto-tuner"
 version = "0.1.0"
-description = "Automatic benchmarking for LLMs."
+description = "Automatic tunning tool for LLM parameters."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 # TODO: fix this. It doesn't load the benchmark correctly if these are not the exact dependencies.
@@ -82,10 +82,6 @@ dependencies = [
     "uvicorn==0.34.0",
     "websockets==12.0",
 ]
-
-[tool.poetry.dependencies]
-
-
 
 [project.scripts]
 benchmarker = "benchmarker.launch_bench:main"

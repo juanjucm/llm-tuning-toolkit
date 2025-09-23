@@ -2,17 +2,17 @@ model: &model "meta-llama/Meta-Llama-3.1-8b-Instruct"
 port: &port 8000
 host: 0.0.0.0
 
-# scenario auto-tuning configuration
+# scenario config for auto-tuning
 scenario:
   name: "balanced"
   prompt_options: "num_tokens=4000,min_tokens=4000,max_tokens=4000,variance=0"
   decode_options: "num_tokens=16,min_tokens=16,max_tokens=16,variance=0"
-  dataset_file: null  # optional dataset file, set to null for random
+  dataset_file: null  # optional dataset file.
   throughput_duration: "60s"
   rate_duration: "60s"
   max_rate_finding_attempts: 5
   rate_decrease_factor: 0.15
-  max_vus: 512
+  max_vus: 800
   max_model_len: &max_model_len 4096
   goodput_criteria:
     # Goodput SLOs - Performance requirements to meet for this scenario.
@@ -28,9 +28,7 @@ scenario:
     #   min_throughput (req/s)
     # If not specified, no check is done for that metric.
     max_e2e_avg_ms: 10000
-    max_ttft_avg_ms: 20000
     min_success_rate: 0.95
-    max_itl_avg_ms: 1000
 
 # Engine to test and its parameter pool (only one engine at a time)
 engine:
@@ -53,4 +51,4 @@ engine:
     max-num-batched-tokens: [4096]
   action_args_pool:
     # Action parameters (flags that can be included or excluded)
-    enable-chunked-prefill: [true]
+    enable-chunked-prefill: [true, false]

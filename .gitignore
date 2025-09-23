@@ -28,3 +28,6 @@ Thumbs.db
 
 # files
 .parquet
+
+# auto-tune results forlder
+auto_tune_results
