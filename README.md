@@ -1,4 +1,4 @@
-# LLM Tunning Toolkit ⚙️
+# LLM Tuning Toolkit ⚙️
 
 Toolkit for automatic tuning and benchmarking of LLM serving configurations.
 
