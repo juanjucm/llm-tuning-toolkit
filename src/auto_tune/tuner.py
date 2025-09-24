@@ -507,7 +507,8 @@ class AutoTuner:
 
         # TODO: extend to support multiple engine auto-tuning.
         engine_name = self.config["engine"]["name"]
-        engine_path = self.results_dir.joinpath(engine_name)
+        run_id = uuid.uuid4().hex[:4]
+        engine_path = self.results_dir.joinpath(engine_name, f"run_{run_id}_{self.timestamp}")
         engine_path.mkdir(parents=True, exist_ok=True)
 
         param_combinations = self._generate_parameter_combinations()
