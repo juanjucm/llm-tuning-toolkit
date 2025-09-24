@@ -450,11 +450,20 @@ class AutoTuner:
         action_args_pool = engine_config.get("action_args_pool", {})
 
         # Get parameter names and values for each type
-        value_param_names = list(value_args_pool.keys())
-        value_param_values = [value_args_pool[name] for name in value_param_names]
+        if not value_args_pool and not action_args_pool:
+            self.logger.warning("No tunable parameters defined in config, only base args will be used.")
+            return []
 
-        action_param_names = list(action_args_pool.keys())
-        action_param_values = [action_args_pool[name] for name in action_param_names]
+        value_param_names = []
+        value_param_values = []
+        action_param_names = []
+        action_param_values = []
+        if value_args_pool:
+            value_param_names = list(value_args_pool.keys())
+            value_param_values = [value_args_pool[name] for name in value_param_names]
+        if action_args_pool:
+            action_param_names = list(action_args_pool.keys())
+            action_param_values = [action_args_pool[name] for name in action_param_names]
 
         # Generate all combinations
         combinations = []
