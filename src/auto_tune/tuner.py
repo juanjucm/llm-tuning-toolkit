@@ -72,11 +72,11 @@ class AutoTuner:
 
         return args
 
-    def _launch_docker_engine(self, engine_args: Dict) -> Optional[docker.models.containers.Container]:
+    def _launch_docker_engine(self, engine_args: List[str]) -> Optional[docker.models.containers.Container]:
         """
         Launch a Docker container running the engine.
         Args:
-            engine_args (Dict): Dictionary of engine arguments.
+            engine_args (List[str]): List of engine arguments.
         Returns:
             Optional[docker.models.containers.Container]: Docker container instance or None if failed.
         """
@@ -157,17 +157,29 @@ class AutoTuner:
             cmd = [str(c) for c in cmd]
 
             self.logger.info(f"Running benchmark: {' '.join(cmd)}")
-            _ = subprocess.run(cmd, capture_output=True, text=True, timeout=None, check=True)
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=None, check=True)
 
+            # self.logger.info("=== SUBPROCESS OUTPUT ===")
+            # self.logger.info(f"Return code: {proc.returncode}")
+            # self.logger.info(f"STDOUT:\n{proc.stdout}")
+            # if proc.stderr:
+            #     self.logger.info(f"STDERR:\n{proc.stderr}")
             self.logger.info("Benchmark completed successfully")
 
         except subprocess.CalledProcessError as e:
-            self.logger.error(f"Benchmark failed: {e}")
-            self.logger.error(f"stdout: {e.stdout}")
-            self.logger.error(f"stderr: {e.stderr}")
+            self.logger.error(f"Benchmark failed with return code {e.returncode}: {e}")
+            self.logger.error(f"Command: {' '.join(cmd)}")
+            self.logger.error(f"STDOUT:\n{e.stdout if e.stdout else 'None'}")
+            self.logger.error(f"STDERR:\n{e.stderr if e.stderr else 'None'}")
+            
+            # Print full traceback for debugging
+            import traceback
+            self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise e
         except Exception as e:
-            self.logger.error(f"Error running benchmark: {e}")
+            self.logger.error(f"Unexpected error running benchmark: {e}")
+            import traceback
+            self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise e
 
     def _get_metrics_from_results(self, results_dict: Dict) -> Dict:
@@ -491,12 +503,11 @@ class AutoTuner:
         Run the auto-tuning process.
         """
         # TODO: implement verbose/normal logging levels.
-        auto_tune_run_id = uuid.uuid4().hex[:6]
-        self.logger.info(f"Starting auto-tune process with ID: {auto_tune_run_id}...")
+        self.logger.info(f"Starting auto-tune process...")
 
         # TODO: extend to support multiple engine auto-tuning.
         engine_name = self.config["engine"]["name"]
-        engine_path = self.results_dir.joinpath(f"auto_tune_{auto_tune_run_id}", engine_name)
+        engine_path = self.results_dir.joinpath(engine_name)
         engine_path.mkdir(parents=True, exist_ok=True)
 
         param_combinations = self._generate_parameter_combinations()
@@ -574,6 +585,8 @@ class AutoTuner:
                 all_results.append(result)
             except Exception as e:
                 self.logger.error(f"Error testing parameter config {param_config}: {e}")
+                import traceback
+                traceback.print_exc()
             finally:
                 if container:
                     self._cleanup_container(container)
@@ -586,6 +599,7 @@ class AutoTuner:
                     "timestamp": self.timestamp,
                     "config_file": self.config_path,
                     "goodput_criteria": self.config["scenario"]["goodput_criteria"],
+                    "scenario": self.config["scenario"],
                     "all_results": all_results,
                 },
                 f,

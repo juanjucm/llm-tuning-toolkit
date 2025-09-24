@@ -1,19 +1,19 @@
-model: &model "meta-llama/Meta-Llama-3.1-8b-Instruct"
+model: &model "ibm-granite/granite-4.0-tiny-preview"
 port: &port 8000
 host: 0.0.0.0
 
 # scenario config for auto-tuning
 scenario:
   name: "balanced"
-  prompt_options: "num_tokens=4000,min_tokens=4000,max_tokens=4000,variance=0"
-  decode_options: "num_tokens=16,min_tokens=16,max_tokens=16,variance=0"
+  prompt_options: "num_tokens=1024,min_tokens=1024,max_tokens=1024,variance=0"
+  decode_options: "num_tokens=64,min_tokens=64,max_tokens=64,variance=0"
   dataset_file: null  # optional dataset file.
-  throughput_duration: "60s"
+  throughput_duration: "120s"
   rate_duration: "60s"
   max_rate_finding_attempts: 5
-  rate_decrease_factor: 0.15
-  max_vus: 800
-  max_model_len: &max_model_len 4096
+  rate_decrease_factor: 0.2
+  max_vus: 128
+  max_model_len: &max_model_len 4096  # max model length (for vLLM)
   goodput_criteria:
     # Goodput SLOs - Performance requirements to meet for this scenario.
     # Auto-Tuning goal is to find highest throughput configuration that meet these SLOs.
@@ -33,7 +33,7 @@ scenario:
 # Engine to test and its parameter pool (only one engine at a time)
 engine:
   name: "vllm"
-  image: "vllm/vllm-openai:latest"
+  image: "vllm/vllm-openai:v0.10.2"
   base_args:
     - "--model"
     - *model
@@ -44,11 +44,12 @@ engine:
     - "--max-model-len"
     - *max_model_len
     - "--gpu-memory-utilization"
-    - "0.95"
+    - "0.9"
+    - "--enable-chunked-prefill"
   value_args_pool:
     # Value parameters (--param value)
-    max-num-seqs: [128, 1024]
+    max-num-seqs: [512]
     max-num-batched-tokens: [4096]
   action_args_pool:
     # Action parameters (flags that can be included or excluded)
-    enable-chunked-prefill: [true, false]
+    # enable-chunked-prefill: [true, false]
