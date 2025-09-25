@@ -523,7 +523,6 @@ class AutoTuner:
             # TODO: if throughput is a goodput criteria, only perform throughput benchmark.
             # It makes no sense to do rate finding (decrease rate) if rate is a requirement and is not met by throughput bench.
             try:
-                # TODO: save logs to debug if needed
                 engine_args = self._build_engine_args(param_config)
                 container = self._launch_docker_engine(engine_args)
                 if not container:
@@ -547,7 +546,15 @@ class AutoTuner:
                 goodput_checks, meets = self._meets_goodput_criteria(metrics)
                 self.logger.info("Goodput SLOs checks:")
                 self.logger.info(json.dumps(goodput_checks, indent=2))
+
                 if not meets:
+                    # if 90% of throughput is less than best found so far, skip rate finding.
+                    # rate finding starts at 90% of throughput.
+                    if (metrics["throughput"] * 0.90) <= self.best_throughput:
+                        self.logger.info("Goodput criteria not met, but throughput is worse than best found so far. Skipping rate finding...")
+                        self.logger.info(f"{'=' * 60}")
+                        continue
+
                     self.logger.info("Goodput criteria not met, finding optimal rate for this config...")
                     self.logger.info(f"{'=' * 60}")
                     metrics, goodput_checks = self._find_optimal_rate(
