@@ -52,7 +52,7 @@ def parse_arguments() -> argparse.Namespace:
         help='Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)',
         default="all",
     )
-    parser.add_argument("--save-dir", type=str, help="Directory to save benchmark results", default="./results")
+    parser.add_argument("--output-path", type=str, help="Directory to save benchmark results", default="./results")
     parser.add_argument("--show-logs", action="store_true", help="Show engine container logs.")
 
     return parser.parse_args()
@@ -101,6 +101,7 @@ def launch_docker_engine(
             image=engine_config.get("image"),
             command=engine_config.get("cmd"),
             environment=engine_config.get("envs"),
+            runtime="nvidia",
             ports={f"{port}/tcp": port},
             detach=True,
             name=container_name,
@@ -110,11 +111,9 @@ def launch_docker_engine(
         )
 
         return container
-
     except Exception as e:
         logger.error(f"Failed to launch {engine_name}: {e}")
-        return None
-
+        raise e
 
 def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 300) -> bool:
     """Wait for the server to be ready to accept requests."""
@@ -133,7 +132,7 @@ def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 300)
 
 
 def generate_unique_run_id() -> str:
-    return f"run_{uuid.uuid4().hex[:8]}"
+    return f"{uuid.uuid4().hex[:4]}"
 
 
 def run_benchmark(
@@ -143,7 +142,7 @@ def run_benchmark(
     engine_name: str,
     engine_config: str,
     run_id: str,
-    save_dir: str,
+    output_path: str,
     logger: logging.Logger,
 ):
     try:
@@ -151,7 +150,7 @@ def run_benchmark(
         cmd.extend(["--no-console"])  # disable UI so the process doesn't get stuck when finished.
         cmd.extend(bench_args)
         cmd.extend(["--run-id", run_id])
-        # cmd.extend(['--save-dir', save_dir])
+        cmd.extend(['--output-path', output_path])
 
         metadata = f"engine={engine_name},scenario={scenario_name},scenario_description={scenario_description},engine_config={json.dumps(engine_config)}"
         cmd.extend(["--extra-meta", metadata])
@@ -161,7 +160,7 @@ def run_benchmark(
         logger.info(f"Running benchmark: {' '.join(cmd)}")
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=None, check=True)
 
-        logger.info(f"Benchmark completed successfully for {engine_name} - {scenario_name}")
+        logger.info(f"Benchmark completed for {engine_name} - {scenario_name}")
         logger.info(proc.stdout)
     except Exception as e:
         logger.error(f"Error running benchmark for {engine_name} - {scenario_name}: {e}")
@@ -169,14 +168,12 @@ def run_benchmark(
 
         logger.error(traceback.format_exc())
 
-
 def cleanup_container(container: Container, logger: logging.Logger):
     try:
         container.stop(timeout=20)
         container.remove()
     except Exception as e:
         logger.warning(f"Failed to cleanup container {container.name}: {e}")
-
 
 def stream_container_logs(container_name):
     def log_stream():
@@ -195,7 +192,6 @@ def stream_container_logs(container_name):
     thread = threading.Thread(target=log_stream, daemon=True)
     thread.start()
     return thread
-
 
 def main():
     logger = setup_logging()
@@ -232,11 +228,12 @@ def main():
         successful_runs = 0
         requested_engines = args.engines.split(",")
         for scenario in scenarios_to_run:
+            scenario_run_id = generate_unique_run_id()
+
             logger.info(
-                f"Starting scenario: {scenario['name']} - {scenario.get('description', 'No description')}"
+                f"Starting scenario: {scenario['name']} ({scenario_run_id}) - {scenario.get('description', 'No description')}"
             )
 
-            scenario_run_id = generate_unique_run_id()
             scenario_name = scenario.get("name", "")
             scenario_description = scenario.get("description", "")
             scenario_bench_args = scenario.get("bench_config", [])
@@ -278,6 +275,12 @@ def main():
                     server_config = {}
                     # server_config = get_server_config_from_logs(container_name, engine_name, logger)
 
+                    scenario_output_dir = os.path.join(args.output_path, scenario_name)
+                    os.makedirs(scenario_output_dir, exist_ok=True)
+
+                    output_file_name = f"{engine_name}_{model.replace('/', '-')}_{scenario_run_id}.json"
+                    output_file_path = os.path.join(scenario_output_dir, output_file_name)
+
                     # Run benchmark
                     run_benchmark(
                         scenario_name=scenario_name,
@@ -286,7 +289,7 @@ def main():
                         engine_name=engine_name,
                         engine_config=server_config,
                         run_id=scenario_run_id,
-                        save_dir=args.save_dir,
+                        output_path=output_file_path,
                         logger=logger,
                     )
 
