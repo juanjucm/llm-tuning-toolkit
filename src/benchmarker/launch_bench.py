@@ -228,10 +228,8 @@ def main():
         successful_runs = 0
         requested_engines = args.engines.split(",")
         for scenario in scenarios_to_run:
-            scenario_run_id = generate_unique_run_id()
-
             logger.info(
-                f"Starting scenario: {scenario['name']} ({scenario_run_id}) - {scenario.get('description', 'No description')}"
+                f"Starting scenario: {scenario['name']} - {scenario.get('description', 'No description')}"
             )
 
             scenario_name = scenario.get("name", "")
@@ -255,6 +253,7 @@ def main():
                 )
 
             for engine in engines_to_test:
+                run_id = generate_unique_run_id()
                 total_runs += 1
                 try:
                     engine_name = engine["name"]
@@ -278,7 +277,7 @@ def main():
                     scenario_output_dir = os.path.join(args.output_path, scenario_name)
                     os.makedirs(scenario_output_dir, exist_ok=True)
 
-                    output_file_name = f"{engine_name}_{model.replace('/', '-')}_{scenario_run_id}.json"
+                    output_file_name = f"{engine_name}_{model.replace('/', '-')}_{run_id}.json"
                     output_file_path = os.path.join(scenario_output_dir, output_file_name)
 
                     # Run benchmark
@@ -288,11 +287,10 @@ def main():
                         bench_args=scenario_bench_args,
                         engine_name=engine_name,
                         engine_config=server_config,
-                        run_id=scenario_run_id,
+                        run_id=run_id,
                         output_path=output_file_path,
                         logger=logger,
                     )
-
                 except Exception as e:
                     logger.error(f"Error testing '{engine_name}' in '{scenario_name}': {e}")
 
@@ -303,6 +301,8 @@ def main():
                         cleanup_container(container, logger)
                         if logs_thread:
                             logs_thread.join()
+                        
+                    time.sleep(10)  # brief pause between runs
 
         # Summary
         logger.info(f"Benchmark execution completed.")
