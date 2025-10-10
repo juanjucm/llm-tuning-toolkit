@@ -1,19 +1,19 @@
-model: &model "ibm-granite/granite-4.0-tiny-preview"
+model: &model "google/gemma-3-4b-it"
 port: &port 8000
 host: 0.0.0.0
 
 # scenario config for auto-tuning
 scenario:
   name: "balanced"
-  prompt_options: "num_tokens=1024,min_tokens=1024,max_tokens=1024,variance=0"
-  decode_options: "num_tokens=64,min_tokens=64,max_tokens=64,variance=0"
+  prompt_options: "num_tokens=1024,min_tokens=64,max_tokens=4096,variance=512"
+  decode_options: "num_tokens=128,min_tokens=64,max_tokens=1024,variance=128"
   dataset_file: null  # optional dataset file.
   throughput_duration: "120s"
   rate_duration: "60s"
-  max_rate_finding_attempts: 5
-  rate_decrease_factor: 0.2
+  max_rate_finding_attempts: 3
+  rate_decrease_factor: 0.3
   max_vus: 128
-  max_model_len: &max_model_len 4096  # max model length (for vLLM)
+  max_model_len: &max_model_len 8192  # max model length (for vLLM)
   goodput_criteria:
     # Goodput SLOs - Performance requirements to meet for this scenario.
     # Auto-Tuning goal is to find highest throughput configuration that meet these SLOs.
@@ -27,8 +27,8 @@ scenario:
     #   min_success_rate
     #   min_throughput (req/s)
     # If not specified, no check is done for that metric.
-    max_e2e_avg_ms: 10000
-    min_success_rate: 0.95
+    max_e2e_avg_ms: 20000
+    min_success_rate: 0.97
 
 # Engine to test and its parameter pool (only one engine at a time)
 engine:
@@ -44,12 +44,11 @@ engine:
     - "--max-model-len"
     - *max_model_len
     - "--gpu-memory-utilization"
-    - "0.9"
-    - "--enable-chunked-prefill"
+    - "0.97"
   value_args_pool:
     # Value parameters (--param value)
-    max-num-seqs: [512]
-    max-num-batched-tokens: [4096]
+    max-num-seqs: [256, 512, 1024]
+    max-num-batched-tokens: [2048, 8192, 16384]
   action_args_pool:
     # Action parameters (flags that can be included or excluded)
-    # enable-chunked-prefill: [true, false]
+    enable-chunked-prefill: [false, true]
