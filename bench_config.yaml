@@ -1,5 +1,6 @@
 model: &model meta-llama/Meta-Llama-3.1-8b-Instruct
 port: &port 8000
+host: &host 0.0.0.0
 
 scenarios:
   - name: balanced
@@ -12,16 +13,16 @@ scenarios:
       - --max-vus 
       - 128
       - --prompt-options 
-      - "num_tokens=1500,min_tokens=100,max_tokens=8000,variance=500"
+      - "num_tokens=1024,min_tokens=64,max_tokens=4096,variance=512"
       - --decode-options 
-      - "num_tokens=192,min_tokens=192,max_tokens=192,variance=0"
+      -  "num_tokens=128,min_tokens=64,max_tokens=1024,variance=128"
       - --duration 
-      - "120s"
+      - "90s"
       - --warmup 
-      - "30s"
+      - "10s"
     engines:
       - name: vLLM
-        image: vllm/vllm-openai:latest
+        image: vllm/vllm-openai:v0.10.2
         devices: "all"
         args:
           - --model 
@@ -31,13 +32,21 @@ scenarios:
           - --max_model_len 
           - 8192 
           - --gpu_memory_utilization 
-          - 0.95
+          - 0.97
+          - --max-num-seqs
+          - 256
+          - --max-num-batched-tokens
+          - 2048
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
       - name: TGI
-        image: ghcr.io/huggingface/text-generation-inference:latest
+        image: ghcr.io/huggingface/text-generation-inference:3.3.6
         devices: "all"
         args:
           - --model-id 
           - *model 
+          - --hostname
+          - *host
           - --port
           - *port
           - --dtype 
@@ -49,14 +58,20 @@ scenarios:
           - --max-input-tokens
           - 8000
           - --max-batch-prefill-tokens
-          - 16182
+          - 16384
+          - --max-batch-total-tokens
+          - 8192
+          - --waiting-served-ratio
+          - 0.3
+          - --max-concurrent-requests
+          - 256
       - name: SGLang
-        image: lmsysorg/sglang:dev
+        image: lmsysorg/sglang:v0.5.2
         devices: "all"
         args:
           - python3 -m sglang.launch_server 
           - --host 
-          - 0.0.0.0 
+          - *host
           - --port 
           - *port 
           - --model-path 
@@ -66,81 +81,12 @@ scenarios:
           - --context-length 
           - 8192 
           - --mem-fraction-static 
-          - 0.7 
-  - name: high-context
-    description: High context scenario focused on testing long context handling capabilities.
-    bench_config:
-      - --tokenizer-name 
-      - *model
-      - --benchmark-kind 
-      - sweep
-      - --max-vus 
-      - 512
-      - --prompt-options 
-      - "num_tokens=20000,min_tokens=4000,max_tokens=60000,variance=15000"
-      - --decode-options 
-      - "num_tokens=256,min_tokens=64,max_tokens=1024,variance=128"
-      - --duration 
-      - "100s"
-      - --warmup 
-      - "20s"
-      - --dataset-file 
-      - "classification.json"
-    engines:
-      - name: vLLM
-        image: vllm/vllm-openai:latest
-        devices: "all"
-        args:
-          - --model 
-          - *model
-          - --dtype 
-          - bfloat16  
-          - --max_model_len 
-          - 65536
-          - --gpu_memory_utilization 
-          - 0.90
-          - --enable-chunked-prefill
-          - --max-num-seqs 
+          - 0.8 
+          - --max-running-requests
           - 256
-      - name: TGI
-        image: ghcr.io/huggingface/text-generation-inference:latest
-        envs: 
-          - PREFIX_CACHING=1
-        devices: "all"
-        args:
-          - --model-id 
-          - *model 
-          - --dtype 
-          - bfloat16 
-          - --num-shard 
-          - 1 
-          - --max-total-tokens 
-          - 65536 
-          - --max-input-length 
-          - 60000
-          - --max-concurrent-requests 
-          - 256
-      - name: SGLang
-        image: lmsysorg/sglang:dev
-        devices: "all"
-        args:
-          - python3 -m sglang.launch_server 
-          - --host 
-          - 0.0.0.0 
-          - --port 
-          - *port 
-          - --model-path 
-          - *model 
-          - --dtype 
-          - bfloat16 
-          - --context-length 
-          - 65536 
-          - --disable-cuda-graph 
-          - --mem-fraction-static 
-          - 0.75
-          - --max-running-requests 
-          - 256
-  - name: high_concurrency
+          - --chunked-prefill-size
+          - 4096
+  - name: high-concurrency
     description: High concurrency scenario focused on testing maximum throughput with many concurrent users.
     bench_config:
       - --tokenizer-name 
@@ -148,54 +94,67 @@ scenarios:
       - --benchmark-kind 
       - sweep
       - --max-vus 
-      - 800
+      - 1000
       - --prompt-options 
-      - "num_tokens=1024,min_tokens=100,max_tokens=1864,variance=500"
+      - "num_tokens=128,min_tokens=32,max_tokens=512,variance=64"
       - --decode-options 
-      - "num_tokens=100,min_tokens=50,max_tokens=192,variance=50"
+      - "num_tokens=256,min_tokens=64,max_tokens=512,variance=64"
       - --duration 
       - "120s"
       - --warmup 
-      - "30"
+      - "10s"
+      - --sweep-cooldown
+      - "20s"
+      - --dataset-file
+      - share_gpt_turns.json
     engines:
       - name: vLLM
-        image: vllm/vllm-openai:latest
+        image: vllm/vllm-openai:v0.10.2
+        devices: "all"
         args:
           - --model 
           - *model
           - --dtype 
-          - bfloat16 
+          - bfloat16  
           - --max_model_len 
-          - 2056
+          - 1024
           - --gpu_memory_utilization 
-          - 0.95
-          - --max-num-seqs 
-          - 2056
+          - 0.9
           - --enable-chunked-prefill
-          - --enable-prefill-caching
+          - --enable-prefix-caching
+          - --max-num-seqs 
+          - 1024
+          - --max-num-batched-tokens
+          - 8192
       - name: TGI
-        image: ghcr.io/huggingface/text-generation-inference:latest
-        envs: 
-          - PREFIX_CACHING=1
+        image: ghcr.io/huggingface/text-generation-inference:3.3.6
+        devices: "all"
         args:
           - --model-id 
           - *model 
+          - --hostname
+          - *host
+          - --port
+          - *port
           - --dtype 
           - bfloat16 
           - --num-shard 
           - 1 
           - --max-total-tokens 
-          - 4096 
-          - --max-concurrent-requests 
           - 1024
-          - --max-batch-prefill-tokens 
-          - 2048
+          - --max-input-tokens
+          - 1000
+          - --max-batch-prefill-tokens
+          - 1024
+          - --max-concurrent-requests
+          - 1024
       - name: SGLang
-        image: lmsysorg/sglang:dev
+        image: lmsysorg/sglang:v0.5.2
+        devices: "all"
         args:
           - python3 -m sglang.launch_server 
           - --host 
-          - 0.0.0.0 
+          - *host 
           - --port 
           - *port 
           - --model-path 
@@ -203,8 +162,92 @@ scenarios:
           - --dtype 
           - bfloat16 
           - --context-length 
-          - 4096 
-          - --enable-cuda-graph 
+          - 1024 
           - --mem-fraction-static 
-          - 0.7
-
+          - 0.8 
+          - --max-running-requests
+          - 1024
+          - --chunked-prefill-size
+          - 8192
+  - name: high-context
+    description: High context scenario focused on testing long context lengths with fewer concurrent users.
+    bench_config:
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 64
+      - --prompt-options 
+      - "num_tokens=16384,min_tokens=8192,max_tokens=24576,variance=4096"
+      - --decode-options 
+      - "num_tokens=2048,min_tokens=512,max_tokens=8192,variance=1024"
+      - --duration 
+      - "150s"
+      - --warmup 
+      - "30s"
+      - --sweep-cooldown
+      - "20s"
+      - --dataset-file 
+      - "classification.json"
+    engines:
+      - name: vLLM
+        image: vllm/vllm-openai:v0.10.2
+        devices: "all"
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16 
+          - --max_model_len 
+          - 32768
+          - --gpu_memory_utilization 
+          - 0.9
+          - --max-num-seqs 
+          - 128
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+          - --max-num-batched-tokens
+          - 24626
+      - name: TGI
+        image: ghcr.io/huggingface/text-generation-inference:3.3.6
+        args:
+          - --model-id 
+          - *model 
+          - --hostname
+          - *host
+          - --port
+          - *port
+          - --dtype 
+          - bfloat16 
+          - --num-shard 
+          - 1 
+          - --max-total-tokens 
+          - 32768
+          - --max-input-tokens
+          - 24576
+          - --max-batch-prefill-tokens
+          - 24626
+          - --max-concurrent-requests
+          - 128
+      - name: SGLang
+        image: lmsysorg/sglang:v0.5.2
+        devices: "all"
+        args:
+          - python3 -m sglang.launch_server 
+          - --host 
+          - *host 
+          - --port 
+          - *port 
+          - --model-path 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --context-length 
+          - 32768 
+          - --max-running-requests
+          - 128 
+          - --mem-fraction-static 
+          - 0.9
+          - --chunked-prefill-size
+          - 16384
