@@ -171,14 +171,16 @@ class AutoTuner:
             self.logger.error(f"Command: {' '.join(cmd)}")
             self.logger.error(f"STDOUT:\n{e.stdout if e.stdout else 'None'}")
             self.logger.error(f"STDERR:\n{e.stderr if e.stderr else 'None'}")
-            
+
             # Print full traceback for debugging
             import traceback
+
             self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise e
         except Exception as e:
             self.logger.error(f"Unexpected error running benchmark: {e}")
             import traceback
+
             self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
             raise e
 
@@ -551,7 +553,9 @@ class AutoTuner:
                     # if 90% of throughput is less than best found so far, skip rate finding.
                     # rate finding starts at 90% of throughput.
                     if (metrics["throughput"] * 0.90) <= self.best_throughput:
-                        self.logger.info("Goodput criteria not met, but throughput is worse than best found so far. Skipping rate finding...")
+                        self.logger.info(
+                            "Goodput criteria not met, but throughput is worse than best found so far. Skipping rate finding..."
+                        )
                         self.logger.info(f"{'=' * 60}")
                         continue
 
@@ -594,6 +598,7 @@ class AutoTuner:
             except Exception as e:
                 self.logger.error(f"Error testing parameter config {param_config}: {e}")
                 import traceback
+
                 traceback.print_exc()
             finally:
                 if container:

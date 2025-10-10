@@ -52,7 +52,9 @@ def parse_arguments() -> argparse.Namespace:
         help='Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)',
         default="all",
     )
-    parser.add_argument("--output-path", type=str, help="Directory to save benchmark results", default="./results")
+    parser.add_argument(
+        "--output-path", type=str, help="Directory to save benchmark results", default="./results"
+    )
     parser.add_argument("--show-logs", action="store_true", help="Show engine container logs.")
 
     return parser.parse_args()
@@ -115,6 +117,7 @@ def launch_docker_engine(
         logger.error(f"Failed to launch {engine_name}: {e}")
         raise e
 
+
 def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 300) -> bool:
     """Wait for the server to be ready to accept requests."""
     logger.info(f"Waiting for engine to be ready...")
@@ -150,7 +153,7 @@ def run_benchmark(
         cmd.extend(["--no-console"])  # disable UI so the process doesn't get stuck when finished.
         cmd.extend(bench_args)
         cmd.extend(["--run-id", run_id])
-        cmd.extend(['--output-path', output_path])
+        cmd.extend(["--output-path", output_path])
 
         metadata = f"engine={engine_name},scenario={scenario_name},scenario_description={scenario_description},engine_config={json.dumps(engine_config)}"
         cmd.extend(["--extra-meta", metadata])
@@ -168,12 +171,14 @@ def run_benchmark(
 
         logger.error(traceback.format_exc())
 
+
 def cleanup_container(container: Container, logger: logging.Logger):
     try:
         container.stop(timeout=20)
         container.remove()
     except Exception as e:
         logger.warning(f"Failed to cleanup container {container.name}: {e}")
+
 
 def stream_container_logs(container_name):
     def log_stream():
@@ -192,6 +197,7 @@ def stream_container_logs(container_name):
     thread = threading.Thread(target=log_stream, daemon=True)
     thread.start()
     return thread
+
 
 def main():
     logger = setup_logging()
@@ -301,7 +307,7 @@ def main():
                         cleanup_container(container, logger)
                         if logs_thread:
                             logs_thread.join()
-                        
+
                     time.sleep(10)  # brief pause between runs
 
         # Summary
