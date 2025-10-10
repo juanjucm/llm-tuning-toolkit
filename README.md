@@ -2,7 +2,9 @@
 
 Toolkit for automatic tuning and benchmarking of LLM serving configurations.
 
-**NOTE: check TODO.md for WIP**
+> [!WARNING]
+> Still work in progress, you can expect failures.
+> Please, check TODO.md for WIP.
 
 ## Prerequisites
 
@@ -45,7 +47,9 @@ options:
 
 ## Multi Benchmarking Usage
 
-**NOTE: still work in progress, you can expect failures.**
+This tool allows for easily define and launch benchmarking scenarios for a set of defined LLM runtimes with specified parameters.
+
+For running the script, make sure to provide a valid config yaml. Take a loot at `bench_config.yaml` to check the format and expected parameters.
 
 ```console
 usage: uv run multi-benchmarker [-h] [--config CONFIG] [--scenarios SCENARIOS] [--engines ENGINES] [--show-logs] [--save-dir SAVE_DIR]
@@ -64,7 +68,7 @@ options:
 
 ## Dashboard Usage
 
-**NOTE: still work in progress, you can expect failures.**
+This tool launches a dashboard for visualizing benchmarking results.
 
 ```console
 Usage: dashboard [OPTIONS]
