@@ -1,0 +1,464 @@
+{
+  "timestamp": "2025_11_06_16_43_17",
+  "config_file": "./benchmarking_results/google--gemma-3-4b-it/auto-tune/auto-tune-config.yaml",
+  "engine_name": "sglang",
+  "instance_info": {
+    "gpu_type": "Nvidia L40S",
+    "gpu_count": 1
+  },
+  "goodput_criteria": {
+    "min_success_rate": 0.9
+  },
+  "scenario": {
+    "name": "balanced",
+    "prompt_options": "num_tokens=1024,min_tokens=64,max_tokens=4096,variance=512",
+    "decode_options": "num_tokens=128,min_tokens=64,max_tokens=1024,variance=128",
+    "dataset_file": null,
+    "throughput_duration": "90s",
+    "rate_duration": "30s",
+    "max_rate_finding_attempts": 3,
+    "rate_decrease_factor": 0.3,
+    "max_vus": 128,
+    "max_model_len": 8192,
+    "goodput_criteria": {
+      "min_success_rate": 0.9
+    }
+  },
+  "all_results": [
+    {
+      "run_id": "e844",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-running-requests": 256,
+          "chunked-prefill-size": 512
+        },
+        "action_args": {
+          "enable-torch-compile": true
+        }
+      },
+      "engine_container_command": [
+        "python3 -m sglang.launch_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        8000,
+        "--model-path",
+        "google/gemma-3-4b-it",
+        "--dtype",
+        "bfloat16",
+        "--context-length",
+        8192,
+        "--mem-fraction-static",
+        0.9,
+        "--schedule-conservativeness",
+        0.3,
+        "--max-running-requests",
+        "256",
+        "--chunked-prefill-size",
+        "512",
+        "--enable-torch-compile"
+      ],
+      "metrics": {
+        "throughput": 5.40292851858588,
+        "total_requests": 503,
+        "successful_requests": 488,
+        "failed_requests": 15,
+        "success_rate": 0.9701789264413518,
+        "ttft_p99_ms": 12025.894,
+        "ttft_p95_ms": 10047.061,
+        "ttft_p90_ms": 7586.311,
+        "ttft_p80_ms": 3189.306,
+        "ttft_p70_ms": 1284.277,
+        "ttft_p60_ms": 563.515,
+        "ttft_p50_ms": 444.951,
+        "ttft_avg_ms": 2022.733,
+        "e2e_p99_ms": 59175.949,
+        "e2e_p95_ms": 45253.73,
+        "e2e_p90_ms": 39189.21,
+        "e2e_p80_ms": 30834.257,
+        "e2e_p70_ms": 24878.341,
+        "e2e_p60_ms": 20243.855,
+        "e2e_p50_ms": 16613.751,
+        "e2e_avg_ms": 19986.199,
+        "itl_p99_ms": 325.015,
+        "itl_p95_ms": 226.494,
+        "itl_p90_ms": 185.356,
+        "itl_p80_ms": 167.984,
+        "itl_p70_ms": 156.7,
+        "itl_p60_ms": 151.182,
+        "itl_p50_ms": 147.2,
+        "itl_avg_ms": 159.739
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 0.9701789264413518,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "ce0e",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-running-requests": 256,
+          "chunked-prefill-size": 512
+        },
+        "action_args": {
+          "enable-torch-compile": false
+        }
+      },
+      "engine_container_command": [
+        "python3 -m sglang.launch_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        8000,
+        "--model-path",
+        "google/gemma-3-4b-it",
+        "--dtype",
+        "bfloat16",
+        "--context-length",
+        8192,
+        "--mem-fraction-static",
+        0.9,
+        "--schedule-conservativeness",
+        0.3,
+        "--max-running-requests",
+        "256",
+        "--chunked-prefill-size",
+        "512"
+      ],
+      "metrics": {
+        "throughput": 5.137978985866118,
+        "total_requests": 476,
+        "successful_requests": 463,
+        "failed_requests": 13,
+        "success_rate": 0.9726890756302521,
+        "ttft_p99_ms": 12218.805,
+        "ttft_p95_ms": 10346.804,
+        "ttft_p90_ms": 7968.212,
+        "ttft_p80_ms": 3709.874,
+        "ttft_p70_ms": 1619.194,
+        "ttft_p60_ms": 648.161,
+        "ttft_p50_ms": 450.322,
+        "ttft_avg_ms": 2196.089,
+        "e2e_p99_ms": 60049.106,
+        "e2e_p95_ms": 46850.481,
+        "e2e_p90_ms": 39320.937,
+        "e2e_p80_ms": 31234.412,
+        "e2e_p70_ms": 25570.608,
+        "e2e_p60_ms": 21176.142,
+        "e2e_p50_ms": 16208.008,
+        "e2e_avg_ms": 20598.301,
+        "itl_p99_ms": 529.69,
+        "itl_p95_ms": 206.081,
+        "itl_p90_ms": 172.265,
+        "itl_p80_ms": 158.751,
+        "itl_p70_ms": 151.794,
+        "itl_p60_ms": 147.863,
+        "itl_p50_ms": 145.112,
+        "itl_avg_ms": 161.168
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 0.9726890756302521,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "a41b",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-running-requests": 256,
+          "chunked-prefill-size": 4096
+        },
+        "action_args": {
+          "enable-torch-compile": true
+        }
+      },
+      "engine_container_command": [
+        "python3 -m sglang.launch_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        8000,
+        "--model-path",
+        "google/gemma-3-4b-it",
+        "--dtype",
+        "bfloat16",
+        "--context-length",
+        8192,
+        "--mem-fraction-static",
+        0.9,
+        "--schedule-conservativeness",
+        0.3,
+        "--max-running-requests",
+        "256",
+        "--chunked-prefill-size",
+        "4096",
+        "--enable-torch-compile"
+      ],
+      "metrics": {
+        "throughput": 9.033132246174192,
+        "total_requests": 887,
+        "successful_requests": 813,
+        "failed_requests": 74,
+        "success_rate": 0.9165727170236753,
+        "ttft_p99_ms": 6248.631,
+        "ttft_p95_ms": 4710.405,
+        "ttft_p90_ms": 2793.263,
+        "ttft_p80_ms": 608.696,
+        "ttft_p70_ms": 305.249,
+        "ttft_p60_ms": 260.3,
+        "ttft_p50_ms": 228.828,
+        "ttft_avg_ms": 807.819,
+        "e2e_p99_ms": 37505.214,
+        "e2e_p95_ms": 30568.424,
+        "e2e_p90_ms": 25788.386,
+        "e2e_p80_ms": 20874.498,
+        "e2e_p70_ms": 15489.091,
+        "e2e_p60_ms": 12111.884,
+        "e2e_p50_ms": 9582.496,
+        "e2e_avg_ms": 12422.533,
+        "itl_p99_ms": 209.447,
+        "itl_p95_ms": 115.736,
+        "itl_p90_ms": 103.242,
+        "itl_p80_ms": 100.305,
+        "itl_p70_ms": 97.998,
+        "itl_p60_ms": 95.535,
+        "itl_p50_ms": 93.35,
+        "itl_avg_ms": 100.416
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 0.9165727170236753,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "62ea",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-running-requests": 256,
+          "chunked-prefill-size": 4096
+        },
+        "action_args": {
+          "enable-torch-compile": false
+        }
+      },
+      "engine_container_command": [
+        "python3 -m sglang.launch_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        8000,
+        "--model-path",
+        "google/gemma-3-4b-it",
+        "--dtype",
+        "bfloat16",
+        "--context-length",
+        8192,
+        "--mem-fraction-static",
+        0.9,
+        "--schedule-conservativeness",
+        0.3,
+        "--max-running-requests",
+        "256",
+        "--chunked-prefill-size",
+        "4096"
+      ],
+      "metrics": {
+        "throughput": 9.243223355687935,
+        "total_requests": 914,
+        "successful_requests": 832,
+        "failed_requests": 82,
+        "success_rate": 0.9102844638949672,
+        "ttft_p99_ms": 6019.181,
+        "ttft_p95_ms": 4483.025,
+        "ttft_p90_ms": 2364.671,
+        "ttft_p80_ms": 509.047,
+        "ttft_p70_ms": 288.054,
+        "ttft_p60_ms": 241.25,
+        "ttft_p50_ms": 224.57,
+        "ttft_avg_ms": 749.923,
+        "e2e_p99_ms": 38089.373,
+        "e2e_p95_ms": 30345.489,
+        "e2e_p90_ms": 25595.388,
+        "e2e_p80_ms": 20373.185,
+        "e2e_p70_ms": 14881.356,
+        "e2e_p60_ms": 11901.134,
+        "e2e_p50_ms": 9553.973,
+        "e2e_avg_ms": 12307.041,
+        "itl_p99_ms": 150.578,
+        "itl_p95_ms": 117.067,
+        "itl_p90_ms": 108.656,
+        "itl_p80_ms": 104.605,
+        "itl_p70_ms": 102.028,
+        "itl_p60_ms": 99.406,
+        "itl_p50_ms": 95.887,
+        "itl_avg_ms": 95.668
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 0.9102844638949672,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "8757",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-running-requests": 256,
+          "chunked-prefill-size": 8192
+        },
+        "action_args": {
+          "enable-torch-compile": true
+        }
+      },
+      "engine_container_command": [
+        "python3 -m sglang.launch_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        8000,
+        "--model-path",
+        "google/gemma-3-4b-it",
+        "--dtype",
+        "bfloat16",
+        "--context-length",
+        8192,
+        "--mem-fraction-static",
+        0.9,
+        "--schedule-conservativeness",
+        0.3,
+        "--max-running-requests",
+        "256",
+        "--chunked-prefill-size",
+        "8192",
+        "--enable-torch-compile"
+      ],
+      "metrics": {
+        "throughput": 8.437570611513136,
+        "total_requests": 828,
+        "successful_requests": 760,
+        "failed_requests": 68,
+        "success_rate": 0.9178743961352657,
+        "ttft_p99_ms": 7823.465,
+        "ttft_p95_ms": 6006.364,
+        "ttft_p90_ms": 3973.028,
+        "ttft_p80_ms": 951.529,
+        "ttft_p70_ms": 285.719,
+        "ttft_p60_ms": 240.424,
+        "ttft_p50_ms": 221.391,
+        "ttft_avg_ms": 1014.522,
+        "e2e_p99_ms": 39984.648,
+        "e2e_p95_ms": 32006.84,
+        "e2e_p90_ms": 26844.262,
+        "e2e_p80_ms": 20773.923,
+        "e2e_p70_ms": 17371.65,
+        "e2e_p60_ms": 14257.063,
+        "e2e_p50_ms": 11475.314,
+        "e2e_avg_ms": 13330.68,
+        "itl_p99_ms": 207.557,
+        "itl_p95_ms": 125.453,
+        "itl_p90_ms": 104.884,
+        "itl_p80_ms": 97.207,
+        "itl_p70_ms": 94.617,
+        "itl_p60_ms": 92.284,
+        "itl_p50_ms": 90.242,
+        "itl_avg_ms": 103.189
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 0.9178743961352657,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "0716",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-running-requests": 256,
+          "chunked-prefill-size": 8192
+        },
+        "action_args": {
+          "enable-torch-compile": false
+        }
+      },
+      "engine_container_command": [
+        "python3 -m sglang.launch_server",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        8000,
+        "--model-path",
+        "google/gemma-3-4b-it",
+        "--dtype",
+        "bfloat16",
+        "--context-length",
+        8192,
+        "--mem-fraction-static",
+        0.9,
+        "--schedule-conservativeness",
+        0.3,
+        "--max-running-requests",
+        "256",
+        "--chunked-prefill-size",
+        "8192"
+      ],
+      "metrics": {
+        "throughput": 8.644309694774487,
+        "total_requests": 849,
+        "successful_requests": 780,
+        "failed_requests": 69,
+        "success_rate": 0.9187279151943463,
+        "ttft_p99_ms": 7674.032,
+        "ttft_p95_ms": 6022.195,
+        "ttft_p90_ms": 3532.884,
+        "ttft_p80_ms": 982.39,
+        "ttft_p70_ms": 290.628,
+        "ttft_p60_ms": 248.737,
+        "ttft_p50_ms": 226.781,
+        "ttft_avg_ms": 1019.543,
+        "e2e_p99_ms": 38256.044,
+        "e2e_p95_ms": 30020.876,
+        "e2e_p90_ms": 26723.077,
+        "e2e_p80_ms": 20847.138,
+        "e2e_p70_ms": 17033.753,
+        "e2e_p60_ms": 13976.007,
+        "e2e_p50_ms": 10812.072,
+        "e2e_avg_ms": 13087.793,
+        "itl_p99_ms": 191.377,
+        "itl_p95_ms": 117.055,
+        "itl_p90_ms": 107.719,
+        "itl_p80_ms": 101.762,
+        "itl_p70_ms": 97.797,
+        "itl_p60_ms": 95.605,
+        "itl_p50_ms": 94.223,
+        "itl_avg_ms": 112.817
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 0.9187279151943463,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    }
+  ]
+}

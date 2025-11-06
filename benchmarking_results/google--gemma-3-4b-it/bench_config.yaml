@@ -1,0 +1,231 @@
+model: &model google/gemma-3-4b-it
+port: &port 8000
+host: &host 0.0.0.0
+# Instance-specific info. Adapt when running bench on different instances.
+instance_info:
+  gpu_type: Nvidia L40S
+  gpu_count: 1
+
+scenarios:
+  - name: balanced
+    description: Balanced scenario with a good compromise between concurrency and context length.
+    bench_config:
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 128
+      - --prompt-options 
+      - "num_tokens=1024,min_tokens=64,max_tokens=4096,variance=512"
+      - --decode-options 
+      -  "num_tokens=128,min_tokens=64,max_tokens=1024,variance=128"
+      - --duration 
+      - "60s"
+      - --warmup 
+      - "30s"
+    engines:
+      - name: vLLM
+        image: vllm/vllm-openai:v0.10.2
+        devices: "all"
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16  
+          - --max_model_len 
+          - 8192 
+          - --gpu_memory_utilization 
+          - 0.97
+          - --max-num-seqs
+          - 256
+          - --max-num-batched-tokens
+          - 512
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+      - name: SGLang
+        image: lmsysorg/sglang:v0.5.2
+        devices: "all"
+        args:
+          - python3 -m sglang.launch_server 
+          - --host 
+          - *host
+          - --port 
+          - *port 
+          - --model-path 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --context-length 
+          - 8192 
+          - --mem-fraction-static 
+          - 0.8 
+          - --max-running-requests
+          - 256
+          - --chunked-prefill-size
+          - 4096
+  - name: high-concurrency
+    description: High concurrency scenario focused on testing maximum throughput with many concurrent users.
+    bench_config:
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 1000
+      - --prompt-options 
+      - "num_tokens=128,min_tokens=32,max_tokens=512,variance=64"
+      - --decode-options 
+      - "num_tokens=256,min_tokens=64,max_tokens=512,variance=64"
+      - --duration 
+      - "120s"
+      - --warmup 
+      - "10s"
+      - --sweep-cooldown
+      - "20s"
+      - --dataset-file
+      - share_gpt_turns.json
+    engines:
+      - name: vLLM
+        image: vllm/vllm-openai:v0.10.2
+        devices: "all"
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16  
+          - --max_model_len 
+          - 1024
+          - --gpu_memory_utilization 
+          - 0.9
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+          - --max-num-seqs 
+          - 1024
+          - --max-num-batched-tokens
+          - 8192
+      - name: TGI
+        image: ghcr.io/huggingface/text-generation-inference:3.3.6
+        devices: "all"
+        args:
+          - --model-id 
+          - *model 
+          - --hostname
+          - *host
+          - --port
+          - *port
+          - --dtype 
+          - bfloat16 
+          - --num-shard 
+          - 1 
+          - --max-total-tokens 
+          - 1024
+          - --max-input-tokens
+          - 1000
+          - --max-batch-prefill-tokens
+          - 1024
+          - --max-concurrent-requests
+          - 1024
+      - name: SGLang
+        image: lmsysorg/sglang:v0.5.2
+        devices: "all"
+        args:
+          - python3 -m sglang.launch_server 
+          - --host 
+          - *host 
+          - --port 
+          - *port 
+          - --model-path 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --context-length 
+          - 1024 
+          - --mem-fraction-static 
+          - 0.8 
+          - --max-running-requests
+          - 1024
+          - --chunked-prefill-size
+          - 8192
+  - name: long-context
+    description: Long context scenario focused on testing long context lengths with fewer concurrent users.
+    bench_config:
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 64
+      - --prompt-options 
+      - "num_tokens=16384,min_tokens=8192,max_tokens=24576,variance=4096"
+      - --decode-options 
+      - "num_tokens=2048,min_tokens=512,max_tokens=8192,variance=1024"
+      - --duration 
+      - "150s"
+      - --warmup 
+      - "30s"
+      - --sweep-cooldown
+      - "20s"
+      - --dataset-file 
+      - "classification.json"
+    engines:
+      - name: vLLM
+        image: vllm/vllm-openai:v0.10.2
+        devices: "all"
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16 
+          - --max_model_len 
+          - 32768
+          - --gpu_memory_utilization 
+          - 0.9
+          - --max-num-seqs 
+          - 128
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+          - --max-num-batched-tokens
+          - 24626
+      - name: TGI
+        image: ghcr.io/huggingface/text-generation-inference:3.3.6
+        args:
+          - --model-id 
+          - *model 
+          - --hostname
+          - *host
+          - --port
+          - *port
+          - --dtype 
+          - bfloat16 
+          - --num-shard 
+          - 1 
+          - --max-total-tokens 
+          - 32768
+          - --max-input-tokens
+          - 24576
+          - --max-batch-prefill-tokens
+          - 24626
+          - --max-concurrent-requests
+          - 128
+      - name: SGLang
+        image: lmsysorg/sglang:v0.5.2
+        devices: "all"
+        args:
+          - python3 -m sglang.launch_server 
+          - --host 
+          - *host 
+          - --port 
+          - *port 
+          - --model-path 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --context-length 
+          - 32768 
+          - --max-running-requests
+          - 128 
+          - --mem-fraction-static 
+          - 0.9
+          - --chunked-prefill-size
+          - 16384

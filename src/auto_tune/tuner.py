@@ -107,7 +107,7 @@ class AutoTuner:
             self.logger.error(f"Failed to launch engine: {e}")
             return None
 
-    def _wait_for_server_ready(self, port: int, timeout: int = 300) -> bool:
+    def _wait_for_server_ready(self, port: int, timeout: int = 700) -> bool:
         """
         Wait for the server to be ready to accept requests.
         Args:
@@ -611,6 +611,8 @@ class AutoTuner:
                 {
                     "timestamp": self.timestamp,
                     "config_file": self.config_path,
+                    "engine_name": engine_name,
+                    "instance_info": self.config.get("instance_info", {}),
                     "goodput_criteria": self.config["scenario"]["goodput_criteria"],
                     "scenario": self.config["scenario"],
                     "all_results": all_results,
