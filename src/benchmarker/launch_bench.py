@@ -299,7 +299,7 @@ def main():
                     run_benchmark(
                         scenario_name=scenario_name,
                         scenario_description=scenario_description,
-                        instance_info=json.dumps(instance_info)
+                        instance_info=json.dumps(instance_info),
                         bench_args=scenario_bench_args,
                         engine_name=engine_name,
                         engine_args=engine_config['cmd'],
