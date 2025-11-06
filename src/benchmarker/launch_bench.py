@@ -145,6 +145,7 @@ def generate_unique_run_id() -> str:
 def run_benchmark(
     scenario_name: str,
     scenario_description: str,
+    instance_info: str,
     bench_args: List,
     engine_name: str,
     engine_args: str,
@@ -160,7 +161,7 @@ def run_benchmark(
         cmd.extend(["--run-id", run_id])
         cmd.extend(["--output-path", output_path])
 
-        metadata = f"engine={engine_name},scenario={scenario_name},scenario_description={scenario_description},engine_args={engine_args}, engine_envs={engine_envs}"
+        metadata = f"engine={engine_name},instance={instance_info},scenario={scenario_name},scenario_description={scenario_description},engine_args={engine_args},engine_envs={engine_envs}"
         cmd.extend(["--extra-meta", metadata])
 
         cmd = [str(c) for c in cmd]
@@ -214,6 +215,7 @@ def main():
 
         model = config.get("model")
         port = config.get("port", 8000)
+        instance_info = config.get("instance_info", {})
 
         if not model:
             logger.error("No model specified in configuration")
@@ -297,6 +299,7 @@ def main():
                     run_benchmark(
                         scenario_name=scenario_name,
                         scenario_description=scenario_description,
+                        instance_info=json.dumps(instance_info)
                         bench_args=scenario_bench_args,
                         engine_name=engine_name,
                         engine_args=engine_config['cmd'],
