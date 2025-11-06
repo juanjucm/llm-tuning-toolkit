@@ -75,7 +75,11 @@ def get_engine_config_dict(engine: Dict) -> Dict:
                 environment[key] = value
 
     config["envs"] = environment
-    config["envs"]["HF_TOKEN"] = HF_TOKEN
+    
+    # Add HF_TOKEN to envs if available
+    if HF_TOKEN:
+        config["envs"]["HF_TOKEN"] = HF_TOKEN
+
     config["devices"] = engine.get("devices", [])
 
     return config
@@ -143,7 +147,8 @@ def run_benchmark(
     scenario_description: str,
     bench_args: List,
     engine_name: str,
-    engine_config: str,
+    engine_args: str,
+    engine_envs: str,
     run_id: str,
     output_path: str,
     logger: logging.Logger,
@@ -155,7 +160,7 @@ def run_benchmark(
         cmd.extend(["--run-id", run_id])
         cmd.extend(["--output-path", output_path])
 
-        metadata = f"engine={engine_name},scenario={scenario_name},scenario_description={scenario_description},engine_config={json.dumps(engine_config)}"
+        metadata = f"engine={engine_name},scenario={scenario_name},scenario_description={scenario_description},engine_args={engine_args}, engine_envs={engine_envs}"
         cmd.extend(["--extra-meta", metadata])
 
         cmd = [str(c) for c in cmd]
@@ -276,15 +281,17 @@ def main():
                         logger.error(f"Timeout - Server {engine_name} failed to start properly.")
                         continue
 
-                    # Get server configuration from logs
-                    server_config = {}
-                    # server_config = get_server_config_from_logs(container_name, engine_name, logger)
-
                     scenario_output_dir = os.path.join(args.output_path, scenario_name)
                     os.makedirs(scenario_output_dir, exist_ok=True)
 
                     output_file_name = f"{engine_name}_{model.replace('/', '-')}_{run_id}.json"
                     output_file_path = os.path.join(scenario_output_dir, output_file_name)
+
+                    # Remove HF token from envs to report
+                    if "HF_TOKEN" in engine_config["envs"]:
+                        engine_envs_to_report = engine_config["envs"].copy()
+                        if "HF_TOKEN" in engine_envs_to_report.keys():
+                            del engine_envs_to_report["HF_TOKEN"]
 
                     # Run benchmark
                     run_benchmark(
@@ -292,7 +299,8 @@ def main():
                         scenario_description=scenario_description,
                         bench_args=scenario_bench_args,
                         engine_name=engine_name,
-                        engine_config=server_config,
+                        engine_args=engine_config['cmd'],
+                        engine_envs=engine_envs_to_report,
                         run_id=run_id,
                         output_path=output_file_path,
                         logger=logger,
