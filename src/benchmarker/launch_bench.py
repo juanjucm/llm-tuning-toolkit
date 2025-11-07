@@ -290,19 +290,19 @@ def main():
                     output_file_path = os.path.join(scenario_output_dir, output_file_name)
 
                     # Remove HF token from envs to report
-                    if "HF_TOKEN" in engine_config["envs"]:
-                        engine_envs_to_report = engine_config["envs"].copy()
-                        if "HF_TOKEN" in engine_envs_to_report.keys():
+                    if "envs" in engine_config.keys():
+                        if "HF_TOKEN" in engine_config["envs"]:
+                            engine_envs_to_report = engine_config["envs"].copy()
                             del engine_envs_to_report["HF_TOKEN"]
 
                     # Run benchmark
                     run_benchmark(
                         scenario_name=scenario_name,
                         scenario_description=scenario_description,
-                        instance_info=json.dumps(instance_info),
+                        instance_info="",  # json.dumps(instance_info),
                         bench_args=scenario_bench_args,
                         engine_name=engine_name,
-                        engine_args=engine_config['cmd'],
+                        engine_args="",  # engine_config['cmd'],
                         engine_envs=engine_envs_to_report,
                         run_id=run_id,
                         output_path=output_file_path,
