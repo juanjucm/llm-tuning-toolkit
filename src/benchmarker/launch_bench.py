@@ -92,22 +92,14 @@ def launch_docker_engine(
         container_name = f"bench_{engine_name.lower()}"
         logger.info(f"Starting {engine_name} container: {container_name}")
 
-        # NOTE: update for supporting cpu and mps.
-        device_requests = []
-        if "devices" in engine_config:
-            device_config = engine_config["devices"]
-            if isinstance(device_config, str):
-                device_ids = [device_config] if device_config == "all" else device_config.split(",")
-                device_requests = [docker.types.DeviceRequest(device_ids=device_ids, capabilities=[["gpu"]])]
-        else:
-            device_requests = [docker.types.DeviceRequest(device_ids=["all"], capabilities=[["gpu"]])]
+        devices = engine_config['devices']
+        device_requests = [docker.types.DeviceRequest(device_ids=devices, capabilities=[["gpu"]])]
 
         client = docker.from_env()
         container = client.containers.run(
             image=engine_config.get("image"),
             command=engine_config.get("cmd"),
             environment=engine_config.get("envs"),
-            runtime="nvidia",
             ports={f"{port}/tcp": port},
             detach=True,
             name=container_name,
@@ -122,7 +114,7 @@ def launch_docker_engine(
         raise e
 
 
-def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 300) -> bool:
+def wait_for_server_ready(port: int, logger: logging.Logger, timeout: int = 600) -> bool:
     """Wait for the server to be ready to accept requests."""
     logger.info(f"Waiting for engine to be ready...")
     start_time = time.time()

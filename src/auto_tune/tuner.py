@@ -87,7 +87,8 @@ class AutoTuner:
             container_name = f"autotune_engine_{int(time.time())}"
             self.logger.info(f"Starting engine container: {container_name}")
 
-            device_requests = [docker.types.DeviceRequest(device_ids=["all"], capabilities=[["gpu"]])]
+            devices = engine_config['devices']
+            device_requests = [docker.types.DeviceRequest(device_ids=devices, capabilities=[["gpu"]])]
 
             container = self.docker_client.containers.run(
                 image=engine_config["image"],
