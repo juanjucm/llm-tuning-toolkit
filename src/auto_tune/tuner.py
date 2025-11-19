@@ -97,9 +97,8 @@ class AutoTuner:
                 ports={f"{port}/tcp": port},
                 detach=True,
                 name=container_name,
-                remove=False,
-                auto_remove=False,
                 device_requests=device_requests,
+                stop_signal="SIGTERM"
             )
 
             return container
@@ -133,13 +132,29 @@ class AutoTuner:
         return False
 
     def _cleanup_container(self, container: docker.models.containers.Container):
-        """Clean up Docker container"""
+        """
+        Clean up Docker container
+        Args:
+            container (docker.models.containers.Container): Container to clean up.
+        """
         try:
-            container.stop(timeout=20)
-            container.remove()
-            self.logger.info(f"Cleaned up container: {container.name}")
+            self.logger.info(f"Stopping container...")
+            container.stop(timeout=100)
         except Exception as e:
-            self.logger.warning(f"Failed to cleanup container {container.name}: {e}")
+            self.logger.warning(f"Error stopping container, forcing removal.")
+
+        self.logger.info(f"Waiting for container to exit...")
+        try:
+            container.reload()
+        except Exception as e:
+            self.logger.warning(f"Error reloading container status: {e}")
+        while container.status != "exited":
+            time.sleep(1)
+            container.reload()
+            self.logger.info(f"Container status: {container.status}")
+
+        self.logger.info(f"Removing container...")
+        container.remove(force=True)
 
     def _run_inference_benchmarker(self, bench_args: List[str]):
         """

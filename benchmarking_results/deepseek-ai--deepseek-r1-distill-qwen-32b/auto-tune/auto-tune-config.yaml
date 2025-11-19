@@ -1,0 +1,88 @@
+model: &model "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+port: &port 8000
+host: &host 0.0.0.0
+# Instance-specific info. Adapt when running bench on different instances.
+instance_info:
+  gpu_type: Nvidia L40S
+  gpu_count: 4
+
+# scenario config for auto-tuning
+scenario:
+  name: "balanced"
+  prompt_options: "num_tokens=1024,min_tokens=64,max_tokens=4096,variance=512"
+  decode_options: "num_tokens=128,min_tokens=64,max_tokens=1024,variance=128"
+  dataset_file: null  # optional dataset file.
+  throughput_duration: "60s"
+  rate_duration: "30s"
+  max_rate_finding_attempts: 3
+  rate_decrease_factor: 0.3
+  max_vus: 128
+  max_model_len: &max_model_len 8192  # max model length (for vLLM)
+  goodput_criteria:
+    # Goodput SLOs - Performance requirements to meet for this scenario.
+    # Auto-Tuning goal is to find highest throughput configuration that meet these SLOs.
+    # Available values to check:
+    #   max_e2e_avg_ms
+    #   max_e2e_p99_ms
+    #   max_ttft_avg_ms
+    #   max_ttft_p99_ms
+    #   max_itl_avg_ms
+    #   max_itl_p99_ms
+    #   min_success_rate
+    #   min_throughput (req/s)
+    # If not specified, no check is done for that metric.
+    # max_e2e_avg_ms: 100000
+    min_success_rate: 0.8
+engine:
+  name: "vllm"
+  image: "vllm/vllm-openai:v0.11.0"
+  devices: ["all"]
+  base_args:
+    - "--model"
+    - *model
+    - --port
+    - *port
+    - "--dtype"
+    - "bfloat16"
+    - "--max-model-len"
+    - *max_model_len
+    - "--gpu-memory-utilization"
+    - "0.87"
+    - "--tensor-parallel-size"
+    - "4"
+    - "--enable-chunked-prefill"
+    - "--enable-prefix-caching"
+    - "--no-enable-log-requests"
+    - "--disable-log-stats"
+  value_args_pool:
+    # Value parameters (--param value)
+    max-num-seqs: [128, 256]
+    max-num-batched-tokens: [512, 1024, 4096, 8192, 16384]
+  action_args_pool:
+    # Action parameters (flags that can be included or excluded)
+
+# engine:
+#   name: "sglang"
+#   image: "lmsysorg/sglang:v0.5.2"
+#   devices: ['0', '1']
+#   base_args:
+#    - python3 -m sglang.launch_server 
+#    - --host 
+#    - *host
+#    - --port 
+#    - *port 
+#    - --model-path 
+#    - *model 
+#    - --dtype 
+#    - bfloat16 
+#    - --context-length 
+#    - 8192 
+#    - --mem-fraction-static 
+#    - 0.9
+#   value_args_pool:
+#     # Value parameters (--param value)
+#     max-running-requests: [256]
+#     chunked-prefill-size: [4096, 8192, 16384]
+#     schedule-conservativeness: [0.3, 0.8, 1.0]
+#   action_args_pool:
+#     # Action parameters (flags that can be included or excluded)
