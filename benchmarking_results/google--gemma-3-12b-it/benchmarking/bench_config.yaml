@@ -45,6 +45,28 @@ scenarios:
           - --enable-prefix-caching
           - --tensor-parallel-size
           - 2
+      - name: vLLM_dp
+        image: vllm/vllm-openai:v0.11.0
+        devices: ['0', '1']
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16  
+          - --max_model_len 
+          - 8192 
+          - --gpu_memory_utilization 
+          - 0.90
+          - --max-num-seqs
+          - 128
+          - --max-num-batched-tokens
+          - 512
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+          - --tensor-parallel-size
+          - 1
+          - --data-parallel-size
+          - 2
       - name: SGLang
         image: lmsysorg/sglang:v0.5.2
         devices: ['0', '1']
