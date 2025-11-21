@@ -43,6 +43,28 @@ scenarios:
           - 512
           - --enable-chunked-prefill
           - --enable-prefix-caching
+      - name: vLLM_dp
+        image: vllm/vllm-openai:v0.11.0
+        devices: ['0', '1']
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16  
+          - --max_model_len 
+          - 8192 
+          - --gpu_memory_utilization 
+          - 0.90
+          - --max-num-seqs
+          - 128
+          - --max-num-batched-tokens
+          - 512
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+          - --tensor-parallel-size
+          - 1
+          - --data-parallel-size
+          - 2
       - name: SGLang
         image: lmsysorg/sglang:v0.5.2
         devices: ['0']
@@ -66,6 +88,33 @@ scenarios:
           - 4096
           - --schedule-conservativeness
           - 0.8
+      - name: SGLang_dp
+        image: lmsysorg/sglang:v0.5.2
+        devices: ['0', '1']
+        args:
+          - python3 -m sglang.launch_server 
+          - --host 
+          - *host
+          - --port 
+          - *port 
+          - --model-path 
+          - *model 
+          - --dtype 
+          - bfloat16 
+          - --context-length 
+          - 8192 
+          - --mem-fraction-static 
+          - 0.9
+          - --max-running-requests
+          - 256
+          - --chunked-prefill-size
+          - 4096
+          - --schedule-conservativeness
+          - 0.8
+          - --tensor-parallel-size
+          - 1
+          - --data-parallel-size
+          - 2
   # - name: high-concurrency
   #   description: High concurrency scenario focused on testing maximum throughput with many concurrent users.
   #   bench_config:

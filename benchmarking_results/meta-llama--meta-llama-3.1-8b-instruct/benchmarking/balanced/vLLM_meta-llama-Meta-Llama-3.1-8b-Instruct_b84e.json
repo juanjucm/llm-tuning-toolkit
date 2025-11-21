@@ -1,1 +1,660 @@
-{"config":{"max_vus":128,"duration_secs":60,"benchmark_kind":"Sweep","warmup_duration_secs":30,"sweep_cooldown_secs":5,"rates":null,"num_rates":10,"prompt_options":{"num_tokens":1024,"min_tokens":64,"max_tokens":4096,"variance":512},"decode_options":{"num_tokens":128,"min_tokens":64,"max_tokens":1024,"variance":128},"tokenizer":"meta-llama/Meta-Llama-3.1-8b-Instruct","model_name":"meta-llama/Meta-Llama-3.1-8b-Instruct","profile":null,"meta":{"engine_envs":"{}","scenario":"balanced","scenario_description":"Balanced scenario with a good compromise between concurrency and context length.","engine":"vLLM","instance":"","engine_args":""},"run_id":"b84e"},"results":[{"id":"warmup","executor_type":"ConstantVUs","config":{"max_vus":1,"duration_secs":30,"rate":null},"total_requests":12,"total_tokens":1428,"token_throughput_secs":42.176695573161915,"duration_ms":33857,"time_to_first_token_ms":{"p50":123.785,"p60":123.923,"p70":124.092,"p80":124.307,"p90":125.425,"p95":798.79,"p99":1457.074,"avg":227.83},"inter_token_latency_ms":{"p50":21.973,"p60":21.975,"p70":21.984,"p80":21.991,"p90":21.995,"p95":21.997,"p99":21.999,"avg":21.971},"failed_requests":0,"successful_requests":12,"request_rate":0.354426013219848,"total_tokens_sent":12288,"e2e_latency_ms":{"p50":2189.79,"p60":2712.127,"p70":3049.212,"p80":4514.768,"p90":5451.257,"p95":5533.461,"p99":5551.38,"avg":2821.369}},{"id":"throughput","executor_type":"ConstantVUs","config":{"max_vus":128,"duration_secs":60,"rate":null},"total_requests":384,"total_tokens":50824,"token_throughput_secs":846.5292182602168,"duration_ms":60038,"time_to_first_token_ms":{"p50":8671.914,"p60":8852.358,"p70":9150.201,"p80":10329.803,"p90":11409.007,"p95":12534.536,"p99":14295.128,"avg":8437.059},"inter_token_latency_ms":{"p50":65.064,"p60":65.445,"p70":65.691,"p80":65.962,"p90":66.436,"p95":67.153,"p99":68.149,"avg":62.952},"failed_requests":0,"successful_requests":384,"request_rate":6.395939316305746,"total_tokens_sent":393216,"e2e_latency_ms":{"p50":15338.636,"p60":17185.44,"p70":19842.336,"p80":22472.657,"p90":25998.968,"p95":28952.281,"p99":34151.258,"avg":16802.991}},{"id":"constant@0.77req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":0.7675127179566895},"total_requests":44,"total_tokens":5143,"token_throughput_secs":91.25735516006277,"duration_ms":56357,"time_to_first_token_ms":{"p50":140.996,"p60":145.345,"p70":147.067,"p80":149.979,"p90":151.637,"p95":152.298,"p99":153.84,"avg":135.598},"inter_token_latency_ms":{"p50":23.641,"p60":23.691,"p70":23.765,"p80":23.865,"p90":24.005,"p95":24.056,"p99":24.153,"avg":23.476},"failed_requests":0,"successful_requests":44,"request_rate":0.7807356848226253,"total_tokens_sent":45056,"e2e_latency_ms":{"p50":2095.026,"p60":3026.083,"p70":4467.895,"p80":5139.993,"p90":6090.901,"p95":6851.552,"p99":7928.086,"avg":2886.33}},{"id":"constant@1.54req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":1.535025435913379},"total_requests":85,"total_tokens":12362,"token_throughput_secs":212.42085314140547,"duration_ms":58195,"time_to_first_token_ms":{"p50":144.195,"p60":146.845,"p70":150.956,"p80":152.87,"p90":156.777,"p95":159.358,"p99":161.902,"avg":136.821},"inter_token_latency_ms":{"p50":25.316,"p60":25.393,"p70":25.464,"p80":25.557,"p90":25.707,"p95":25.792,"p99":25.851,"avg":24.951},"failed_requests":0,"successful_requests":85,"request_rate":1.4605866782898775,"total_tokens_sent":87040,"e2e_latency_ms":{"p50":3328.649,"p60":3763.389,"p70":4705.91,"p80":5839.158,"p90":7197.397,"p95":8593.635,"p99":10508.336,"avg":3804.024}},{"id":"constant@2.30req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":2.3025381538700684},"total_requests":129,"total_tokens":16769,"token_throughput_secs":285.712099933843,"duration_ms":58691,"time_to_first_token_ms":{"p50":144.496,"p60":147.435,"p70":150.485,"p80":152.892,"p90":155.798,"p95":157.642,"p99":161.135,"avg":134.966},"inter_token_latency_ms":{"p50":26.801,"p60":26.907,"p70":27.086,"p80":27.321,"p90":27.589,"p95":27.677,"p99":27.962,"avg":26.426},"failed_requests":0,"successful_requests":129,"request_rate":2.1979164465063956,"total_tokens_sent":132096,"e2e_latency_ms":{"p50":2243.992,"p60":3386.736,"p70":4886.992,"p80":5663.467,"p90":6616.49,"p95":8100.62,"p99":11911.498,"avg":3587.538}},{"id":"constant@3.07req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":3.070050871826758},"total_requests":169,"total_tokens":23640,"token_throughput_secs":404.9731887621153,"duration_ms":58374,"time_to_first_token_ms":{"p50":150.297,"p60":152.345,"p70":156.553,"p80":159.419,"p90":161.45,"p95":162.901,"p99":165.178,"avg":143.617},"inter_token_latency_ms":{"p50":29.144,"p60":29.334,"p70":29.506,"p80":29.642,"p90":29.808,"p95":29.912,"p99":30.359,"avg":28.93},"failed_requests":0,"successful_requests":169,"request_rate":2.895112897664868,"total_tokens_sent":173056,"e2e_latency_ms":{"p50":3202.943,"p60":4241.984,"p70":5333.721,"p80":6628.331,"p90":8244.622,"p95":9028.19,"p99":10366.358,"avg":4188.886}},{"id":"constant@3.84req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":3.8375635897834477},"total_requests":208,"total_tokens":30277,"token_throughput_secs":511.1451020073478,"duration_ms":59233,"time_to_first_token_ms":{"p50":156.492,"p60":159.877,"p70":163.441,"p80":166.626,"p90":171.511,"p95":174.387,"p99":180.005,"avg":147.162},"inter_token_latency_ms":{"p50":33.195,"p60":33.392,"p70":33.703,"p80":34.256,"p90":34.711,"p95":34.868,"p99":35.172,"avg":32.709},"failed_requests":0,"successful_requests":208,"request_rate":3.5115163727426215,"total_tokens_sent":212992,"e2e_latency_ms":{"p50":4096.096,"p60":5496.168,"p70":6459.569,"p80":7653.853,"p90":9459.892,"p95":10912.125,"p99":13760.718,"avg":4942.596}},{"id":"constant@4.61req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":4.605076307740137},"total_requests":251,"total_tokens":31664,"token_throughput_secs":545.4384336200186,"duration_ms":58052,"time_to_first_token_ms":{"p50":160.527,"p60":163.31,"p70":167.356,"p80":172.471,"p90":177.583,"p95":181.12,"p99":185.525,"avg":151.463},"inter_token_latency_ms":{"p50":35.514,"p60":35.648,"p70":35.916,"p80":36.317,"p90":36.8,"p95":37.831,"p99":38.541,"avg":34.629},"failed_requests":0,"successful_requests":251,"request_rate":4.3236813680717745,"total_tokens_sent":257024,"e2e_latency_ms":{"p50":3163.512,"p60":4541.564,"p70":5875.701,"p80":7613.666,"p90":8894.259,"p95":10782.229,"p99":12254.428,"avg":4588.288}},{"id":"constant@5.37req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":5.372589025696827},"total_requests":289,"total_tokens":40387,"token_throughput_secs":678.5018607574928,"duration_ms":59523,"time_to_first_token_ms":{"p50":167.102,"p60":169.248,"p70":173.981,"p80":177.85,"p90":182.733,"p95":187.423,"p99":192.87,"avg":159.458},"inter_token_latency_ms":{"p50":40.014,"p60":40.38,"p70":40.594,"p80":40.847,"p90":41.286,"p95":41.528,"p99":42.069,"avg":39.292},"failed_requests":0,"successful_requests":289,"request_rate":4.855201865920108,"total_tokens_sent":295936,"e2e_latency_ms":{"p50":4164.836,"p60":5886.758,"p70":7543.337,"p80":8806.929,"p90":10745.556,"p95":12608.101,"p99":16144.598,"avg":5667.954}},{"id":"constant@6.14req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":6.140101743653516},"total_requests":326,"total_tokens":44199,"token_throughput_secs":743.5537317267161,"duration_ms":59442,"time_to_first_token_ms":{"p50":182.663,"p60":185.144,"p70":189.033,"p80":192.632,"p90":198.459,"p95":201.174,"p99":205.707,"avg":169.64},"inter_token_latency_ms":{"p50":46.15,"p60":46.863,"p70":47.675,"p80":48.236,"p90":48.705,"p95":49.712,"p99":56.633,"avg":45.404},"failed_requests":0,"successful_requests":326,"request_rate":5.484253411681474,"total_tokens_sent":333824,"e2e_latency_ms":{"p50":4581.547,"p60":6290.079,"p70":8476.799,"p80":10312.717,"p90":12500.726,"p95":14928.485,"p99":19855.563,"avg":6325.914}},{"id":"constant@6.91req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":6.907614461610206},"total_requests":347,"total_tokens":46810,"token_throughput_secs":791.5161361780521,"duration_ms":59139,"time_to_first_token_ms":{"p50":205.316,"p60":213.209,"p70":224.024,"p80":234.136,"p90":244.27,"p95":251.234,"p99":256.871,"avg":197.343},"inter_token_latency_ms":{"p50":55.989,"p60":56.491,"p70":57.106,"p80":57.869,"p90":59.169,"p95":60.323,"p99":62.398,"avg":53.646},"failed_requests":0,"successful_requests":347,"request_rate":5.8674663374019245,"total_tokens_sent":355328,"e2e_latency_ms":{"p50":5651.085,"p60":7549.258,"p70":9578.063,"p80":11818.051,"p90":14693.752,"p95":16791.606,"p99":21027.697,"avg":7471.455}},{"id":"constant@7.68req/s","executor_type":"ConstantArrivalRate","config":{"max_vus":128,"duration_secs":60,"rate":7.675127179566895},"total_requests":373,"total_tokens":48046,"token_throughput_secs":802.457310490359,"duration_ms":59873,"time_to_first_token_ms":{"p50":309.159,"p60":429.612,"p70":555.737,"p80":799.931,"p90":1054.974,"p95":1263.995,"p99":1806.117,"avg":483.66},"inter_token_latency_ms":{"p50":62.484,"p60":63.194,"p70":64.653,"p80":65.534,"p90":66.995,"p95":67.292,"p99":67.574,"avg":59.435},"failed_requests":0,"successful_requests":373,"request_rate":6.229791799794029,"total_tokens_sent":381952,"e2e_latency_ms":{"p50":6193.809,"p60":7734.735,"p70":10385.851,"p80":12567.612,"p90":15540.728,"p95":18398.073,"p99":23200.182,"avg":8178.907}}],"start_time":"2025-11-19T17:12:29.628822675+00:00","end_time":"2025-11-19T17:26:27.847889433+00:00","system":{"cpu":["AMD EPYC 7R13 Processor cpu0@3592MHz","AMD EPYC 7R13 Processor cpu1@3592MHz","AMD EPYC 7R13 Processor cpu2@3592MHz","AMD EPYC 7R13 Processor cpu3@3592MHz","AMD EPYC 7R13 Processor cpu4@3592MHz","AMD EPYC 7R13 Processor cpu5@3592MHz","AMD EPYC 7R13 Processor cpu6@3592MHz","AMD EPYC 7R13 Processor cpu7@3592MHz","AMD EPYC 7R13 Processor cpu8@3592MHz","AMD EPYC 7R13 Processor cpu9@3592MHz","AMD EPYC 7R13 Processor cpu10@3592MHz","AMD EPYC 7R13 Processor cpu11@3592MHz","AMD EPYC 7R13 Processor cpu12@3592MHz","AMD EPYC 7R13 Processor cpu13@3592MHz","AMD EPYC 7R13 Processor cpu14@3592MHz","AMD EPYC 7R13 Processor cpu15@3592MHz","AMD EPYC 7R13 Processor cpu16@3592MHz","AMD EPYC 7R13 Processor cpu17@3592MHz","AMD EPYC 7R13 Processor cpu18@3592MHz","AMD EPYC 7R13 Processor cpu19@3592MHz","AMD EPYC 7R13 Processor cpu20@3592MHz","AMD EPYC 7R13 Processor cpu21@3592MHz","AMD EPYC 7R13 Processor cpu22@3592MHz","AMD EPYC 7R13 Processor cpu23@3592MHz","AMD EPYC 7R13 Processor cpu24@3592MHz","AMD EPYC 7R13 Processor cpu25@3592MHz","AMD EPYC 7R13 Processor cpu26@3592MHz","AMD EPYC 7R13 Processor cpu27@3592MHz","AMD EPYC 7R13 Processor cpu28@3592MHz","AMD EPYC 7R13 Processor cpu29@3592MHz","AMD EPYC 7R13 Processor cpu30@3592MHz","AMD EPYC 7R13 Processor cpu31@3592MHz","AMD EPYC 7R13 Processor cpu32@3592MHz","AMD EPYC 7R13 Processor cpu33@3592MHz","AMD EPYC 7R13 Processor cpu34@3592MHz","AMD EPYC 7R13 Processor cpu35@2478MHz","AMD EPYC 7R13 Processor cpu36@3592MHz","AMD EPYC 7R13 Processor cpu37@3592MHz","AMD EPYC 7R13 Processor cpu38@3592MHz","AMD EPYC 7R13 Processor cpu39@3592MHz","AMD EPYC 7R13 Processor cpu40@3592MHz","AMD EPYC 7R13 Processor cpu41@3592MHz","AMD EPYC 7R13 Processor cpu42@3592MHz","AMD EPYC 7R13 Processor cpu43@3592MHz","AMD EPYC 7R13 Processor cpu44@3592MHz","AMD EPYC 7R13 Processor cpu45@3592MHz","AMD EPYC 7R13 Processor cpu46@3592MHz","AMD EPYC 7R13 Processor cpu47@3592MHz"],"memory":"372.73 GB","os_name":"Ubuntu","os_version":"24.04","kernel":"6.14.0-1014-aws","hostname":"ip-10-90-1-47"}}
+{
+    "config": {
+        "max_vus": 128,
+        "duration_secs": 60,
+        "benchmark_kind": "Sweep",
+        "warmup_duration_secs": 30,
+        "sweep_cooldown_secs": 5,
+        "rates": null,
+        "num_rates": 10,
+        "prompt_options": {
+            "num_tokens": 1024,
+            "min_tokens": 64,
+            "max_tokens": 4096,
+            "variance": 512
+        },
+        "decode_options": {
+            "num_tokens": 128,
+            "min_tokens": 64,
+            "max_tokens": 1024,
+            "variance": 128
+        },
+        "tokenizer": "meta-llama/Meta-Llama-3.1-8b-Instruct",
+        "model_name": "meta-llama/Meta-Llama-3.1-8b-Instruct",
+        "profile": null,
+        "meta": {
+            "engine_envs": "{}",
+            "scenario": "balanced",
+            "scenario_description": "Balanced scenario with a good compromise between concurrency and context length.",
+            "engine": "vLLM",
+            "instance": "",
+            "engine_args": ""
+        },
+        "run_id": "b84e"
+    },
+    "results": [
+        {
+            "id": "warmup",
+            "executor_type": "ConstantVUs",
+            "config": {
+                "max_vus": 1,
+                "duration_secs": 30,
+                "rate": null
+            },
+            "total_requests": 12,
+            "total_tokens": 1428,
+            "token_throughput_secs": 42.176695573161915,
+            "duration_ms": 33857,
+            "time_to_first_token_ms": {
+                "p50": 123.785,
+                "p60": 123.923,
+                "p70": 124.092,
+                "p80": 124.307,
+                "p90": 125.425,
+                "p95": 798.79,
+                "p99": 1457.074,
+                "avg": 227.83
+            },
+            "inter_token_latency_ms": {
+                "p50": 21.973,
+                "p60": 21.975,
+                "p70": 21.984,
+                "p80": 21.991,
+                "p90": 21.995,
+                "p95": 21.997,
+                "p99": 21.999,
+                "avg": 21.971
+            },
+            "failed_requests": 0,
+            "successful_requests": 12,
+            "request_rate": 0.354426013219848,
+            "total_tokens_sent": 12288,
+            "e2e_latency_ms": {
+                "p50": 2189.79,
+                "p60": 2712.127,
+                "p70": 3049.212,
+                "p80": 4514.768,
+                "p90": 5451.257,
+                "p95": 5533.461,
+                "p99": 5551.38,
+                "avg": 2821.369
+            }
+        },
+        {
+            "id": "throughput",
+            "executor_type": "ConstantVUs",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": null
+            },
+            "total_requests": 384,
+            "total_tokens": 50824,
+            "token_throughput_secs": 846.5292182602168,
+            "duration_ms": 60038,
+            "time_to_first_token_ms": {
+                "p50": 8671.914,
+                "p60": 8852.358,
+                "p70": 9150.201,
+                "p80": 10329.803,
+                "p90": 11409.007,
+                "p95": 12534.536,
+                "p99": 14295.128,
+                "avg": 8437.059
+            },
+            "inter_token_latency_ms": {
+                "p50": 65.064,
+                "p60": 65.445,
+                "p70": 65.691,
+                "p80": 65.962,
+                "p90": 66.436,
+                "p95": 67.153,
+                "p99": 68.149,
+                "avg": 62.952
+            },
+            "failed_requests": 0,
+            "successful_requests": 384,
+            "request_rate": 6.395939316305746,
+            "total_tokens_sent": 393216,
+            "e2e_latency_ms": {
+                "p50": 15338.636,
+                "p60": 17185.44,
+                "p70": 19842.336,
+                "p80": 22472.657,
+                "p90": 25998.968,
+                "p95": 28952.281,
+                "p99": 34151.258,
+                "avg": 16802.991
+            }
+        },
+        {
+            "id": "constant@0.77req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 0.7675127179566895
+            },
+            "total_requests": 44,
+            "total_tokens": 5143,
+            "token_throughput_secs": 91.25735516006277,
+            "duration_ms": 56357,
+            "time_to_first_token_ms": {
+                "p50": 140.996,
+                "p60": 145.345,
+                "p70": 147.067,
+                "p80": 149.979,
+                "p90": 151.637,
+                "p95": 152.298,
+                "p99": 153.84,
+                "avg": 135.598
+            },
+            "inter_token_latency_ms": {
+                "p50": 23.641,
+                "p60": 23.691,
+                "p70": 23.765,
+                "p80": 23.865,
+                "p90": 24.005,
+                "p95": 24.056,
+                "p99": 24.153,
+                "avg": 23.476
+            },
+            "failed_requests": 0,
+            "successful_requests": 44,
+            "request_rate": 0.7807356848226253,
+            "total_tokens_sent": 45056,
+            "e2e_latency_ms": {
+                "p50": 2095.026,
+                "p60": 3026.083,
+                "p70": 4467.895,
+                "p80": 5139.993,
+                "p90": 6090.901,
+                "p95": 6851.552,
+                "p99": 7928.086,
+                "avg": 2886.33
+            }
+        },
+        {
+            "id": "constant@1.54req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 1.535025435913379
+            },
+            "total_requests": 85,
+            "total_tokens": 12362,
+            "token_throughput_secs": 212.42085314140547,
+            "duration_ms": 58195,
+            "time_to_first_token_ms": {
+                "p50": 144.195,
+                "p60": 146.845,
+                "p70": 150.956,
+                "p80": 152.87,
+                "p90": 156.777,
+                "p95": 159.358,
+                "p99": 161.902,
+                "avg": 136.821
+            },
+            "inter_token_latency_ms": {
+                "p50": 25.316,
+                "p60": 25.393,
+                "p70": 25.464,
+                "p80": 25.557,
+                "p90": 25.707,
+                "p95": 25.792,
+                "p99": 25.851,
+                "avg": 24.951
+            },
+            "failed_requests": 0,
+            "successful_requests": 85,
+            "request_rate": 1.4605866782898775,
+            "total_tokens_sent": 87040,
+            "e2e_latency_ms": {
+                "p50": 3328.649,
+                "p60": 3763.389,
+                "p70": 4705.91,
+                "p80": 5839.158,
+                "p90": 7197.397,
+                "p95": 8593.635,
+                "p99": 10508.336,
+                "avg": 3804.024
+            }
+        },
+        {
+            "id": "constant@2.30req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 2.3025381538700684
+            },
+            "total_requests": 129,
+            "total_tokens": 16769,
+            "token_throughput_secs": 285.712099933843,
+            "duration_ms": 58691,
+            "time_to_first_token_ms": {
+                "p50": 144.496,
+                "p60": 147.435,
+                "p70": 150.485,
+                "p80": 152.892,
+                "p90": 155.798,
+                "p95": 157.642,
+                "p99": 161.135,
+                "avg": 134.966
+            },
+            "inter_token_latency_ms": {
+                "p50": 26.801,
+                "p60": 26.907,
+                "p70": 27.086,
+                "p80": 27.321,
+                "p90": 27.589,
+                "p95": 27.677,
+                "p99": 27.962,
+                "avg": 26.426
+            },
+            "failed_requests": 0,
+            "successful_requests": 129,
+            "request_rate": 2.1979164465063956,
+            "total_tokens_sent": 132096,
+            "e2e_latency_ms": {
+                "p50": 2243.992,
+                "p60": 3386.736,
+                "p70": 4886.992,
+                "p80": 5663.467,
+                "p90": 6616.49,
+                "p95": 8100.62,
+                "p99": 11911.498,
+                "avg": 3587.538
+            }
+        },
+        {
+            "id": "constant@3.07req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 3.070050871826758
+            },
+            "total_requests": 169,
+            "total_tokens": 23640,
+            "token_throughput_secs": 404.9731887621153,
+            "duration_ms": 58374,
+            "time_to_first_token_ms": {
+                "p50": 150.297,
+                "p60": 152.345,
+                "p70": 156.553,
+                "p80": 159.419,
+                "p90": 161.45,
+                "p95": 162.901,
+                "p99": 165.178,
+                "avg": 143.617
+            },
+            "inter_token_latency_ms": {
+                "p50": 29.144,
+                "p60": 29.334,
+                "p70": 29.506,
+                "p80": 29.642,
+                "p90": 29.808,
+                "p95": 29.912,
+                "p99": 30.359,
+                "avg": 28.93
+            },
+            "failed_requests": 0,
+            "successful_requests": 169,
+            "request_rate": 2.895112897664868,
+            "total_tokens_sent": 173056,
+            "e2e_latency_ms": {
+                "p50": 3202.943,
+                "p60": 4241.984,
+                "p70": 5333.721,
+                "p80": 6628.331,
+                "p90": 8244.622,
+                "p95": 9028.19,
+                "p99": 10366.358,
+                "avg": 4188.886
+            }
+        },
+        {
+            "id": "constant@3.84req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 3.8375635897834477
+            },
+            "total_requests": 208,
+            "total_tokens": 30277,
+            "token_throughput_secs": 511.1451020073478,
+            "duration_ms": 59233,
+            "time_to_first_token_ms": {
+                "p50": 156.492,
+                "p60": 159.877,
+                "p70": 163.441,
+                "p80": 166.626,
+                "p90": 171.511,
+                "p95": 174.387,
+                "p99": 180.005,
+                "avg": 147.162
+            },
+            "inter_token_latency_ms": {
+                "p50": 33.195,
+                "p60": 33.392,
+                "p70": 33.703,
+                "p80": 34.256,
+                "p90": 34.711,
+                "p95": 34.868,
+                "p99": 35.172,
+                "avg": 32.709
+            },
+            "failed_requests": 0,
+            "successful_requests": 208,
+            "request_rate": 3.5115163727426215,
+            "total_tokens_sent": 212992,
+            "e2e_latency_ms": {
+                "p50": 4096.096,
+                "p60": 5496.168,
+                "p70": 6459.569,
+                "p80": 7653.853,
+                "p90": 9459.892,
+                "p95": 10912.125,
+                "p99": 13760.718,
+                "avg": 4942.596
+            }
+        },
+        {
+            "id": "constant@4.61req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 4.605076307740137
+            },
+            "total_requests": 251,
+            "total_tokens": 31664,
+            "token_throughput_secs": 545.4384336200186,
+            "duration_ms": 58052,
+            "time_to_first_token_ms": {
+                "p50": 160.527,
+                "p60": 163.31,
+                "p70": 167.356,
+                "p80": 172.471,
+                "p90": 177.583,
+                "p95": 181.12,
+                "p99": 185.525,
+                "avg": 151.463
+            },
+            "inter_token_latency_ms": {
+                "p50": 35.514,
+                "p60": 35.648,
+                "p70": 35.916,
+                "p80": 36.317,
+                "p90": 36.8,
+                "p95": 37.831,
+                "p99": 38.541,
+                "avg": 34.629
+            },
+            "failed_requests": 0,
+            "successful_requests": 251,
+            "request_rate": 4.3236813680717745,
+            "total_tokens_sent": 257024,
+            "e2e_latency_ms": {
+                "p50": 3163.512,
+                "p60": 4541.564,
+                "p70": 5875.701,
+                "p80": 7613.666,
+                "p90": 8894.259,
+                "p95": 10782.229,
+                "p99": 12254.428,
+                "avg": 4588.288
+            }
+        },
+        {
+            "id": "constant@5.37req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 5.372589025696827
+            },
+            "total_requests": 289,
+            "total_tokens": 40387,
+            "token_throughput_secs": 678.5018607574928,
+            "duration_ms": 59523,
+            "time_to_first_token_ms": {
+                "p50": 167.102,
+                "p60": 169.248,
+                "p70": 173.981,
+                "p80": 177.85,
+                "p90": 182.733,
+                "p95": 187.423,
+                "p99": 192.87,
+                "avg": 159.458
+            },
+            "inter_token_latency_ms": {
+                "p50": 40.014,
+                "p60": 40.38,
+                "p70": 40.594,
+                "p80": 40.847,
+                "p90": 41.286,
+                "p95": 41.528,
+                "p99": 42.069,
+                "avg": 39.292
+            },
+            "failed_requests": 0,
+            "successful_requests": 289,
+            "request_rate": 4.855201865920108,
+            "total_tokens_sent": 295936,
+            "e2e_latency_ms": {
+                "p50": 4164.836,
+                "p60": 5886.758,
+                "p70": 7543.337,
+                "p80": 8806.929,
+                "p90": 10745.556,
+                "p95": 12608.101,
+                "p99": 16144.598,
+                "avg": 5667.954
+            }
+        },
+        {
+            "id": "constant@6.14req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 6.140101743653516
+            },
+            "total_requests": 326,
+            "total_tokens": 44199,
+            "token_throughput_secs": 743.5537317267161,
+            "duration_ms": 59442,
+            "time_to_first_token_ms": {
+                "p50": 182.663,
+                "p60": 185.144,
+                "p70": 189.033,
+                "p80": 192.632,
+                "p90": 198.459,
+                "p95": 201.174,
+                "p99": 205.707,
+                "avg": 169.64
+            },
+            "inter_token_latency_ms": {
+                "p50": 46.15,
+                "p60": 46.863,
+                "p70": 47.675,
+                "p80": 48.236,
+                "p90": 48.705,
+                "p95": 49.712,
+                "p99": 56.633,
+                "avg": 45.404
+            },
+            "failed_requests": 0,
+            "successful_requests": 326,
+            "request_rate": 5.484253411681474,
+            "total_tokens_sent": 333824,
+            "e2e_latency_ms": {
+                "p50": 4581.547,
+                "p60": 6290.079,
+                "p70": 8476.799,
+                "p80": 10312.717,
+                "p90": 12500.726,
+                "p95": 14928.485,
+                "p99": 19855.563,
+                "avg": 6325.914
+            }
+        },
+        {
+            "id": "constant@6.91req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 6.907614461610206
+            },
+            "total_requests": 347,
+            "total_tokens": 46810,
+            "token_throughput_secs": 791.5161361780521,
+            "duration_ms": 59139,
+            "time_to_first_token_ms": {
+                "p50": 205.316,
+                "p60": 213.209,
+                "p70": 224.024,
+                "p80": 234.136,
+                "p90": 244.27,
+                "p95": 251.234,
+                "p99": 256.871,
+                "avg": 197.343
+            },
+            "inter_token_latency_ms": {
+                "p50": 55.989,
+                "p60": 56.491,
+                "p70": 57.106,
+                "p80": 57.869,
+                "p90": 59.169,
+                "p95": 60.323,
+                "p99": 62.398,
+                "avg": 53.646
+            },
+            "failed_requests": 0,
+            "successful_requests": 347,
+            "request_rate": 5.8674663374019245,
+            "total_tokens_sent": 355328,
+            "e2e_latency_ms": {
+                "p50": 5651.085,
+                "p60": 7549.258,
+                "p70": 9578.063,
+                "p80": 11818.051,
+                "p90": 14693.752,
+                "p95": 16791.606,
+                "p99": 21027.697,
+                "avg": 7471.455
+            }
+        },
+        {
+            "id": "constant@7.68req/s",
+            "executor_type": "ConstantArrivalRate",
+            "config": {
+                "max_vus": 128,
+                "duration_secs": 60,
+                "rate": 7.675127179566895
+            },
+            "total_requests": 373,
+            "total_tokens": 48046,
+            "token_throughput_secs": 802.457310490359,
+            "duration_ms": 59873,
+            "time_to_first_token_ms": {
+                "p50": 309.159,
+                "p60": 429.612,
+                "p70": 555.737,
+                "p80": 799.931,
+                "p90": 1054.974,
+                "p95": 1263.995,
+                "p99": 1806.117,
+                "avg": 483.66
+            },
+            "inter_token_latency_ms": {
+                "p50": 62.484,
+                "p60": 63.194,
+                "p70": 64.653,
+                "p80": 65.534,
+                "p90": 66.995,
+                "p95": 67.292,
+                "p99": 67.574,
+                "avg": 59.435
+            },
+            "failed_requests": 0,
+            "successful_requests": 373,
+            "request_rate": 6.229791799794029,
+            "total_tokens_sent": 381952,
+            "e2e_latency_ms": {
+                "p50": 6193.809,
+                "p60": 7734.735,
+                "p70": 10385.851,
+                "p80": 12567.612,
+                "p90": 15540.728,
+                "p95": 18398.073,
+                "p99": 23200.182,
+                "avg": 8178.907
+            }
+        }
+    ],
+    "start_time": "2025-11-19T17:12:29.628822675+00:00",
+    "end_time": "2025-11-19T17:26:27.847889433+00:00",
+    "system": {
+        "cpu": [
+            "AMD EPYC 7R13 Processor cpu0@3592MHz",
+            "AMD EPYC 7R13 Processor cpu1@3592MHz",
+            "AMD EPYC 7R13 Processor cpu2@3592MHz",
+            "AMD EPYC 7R13 Processor cpu3@3592MHz",
+            "AMD EPYC 7R13 Processor cpu4@3592MHz",
+            "AMD EPYC 7R13 Processor cpu5@3592MHz",
+            "AMD EPYC 7R13 Processor cpu6@3592MHz",
+            "AMD EPYC 7R13 Processor cpu7@3592MHz",
+            "AMD EPYC 7R13 Processor cpu8@3592MHz",
+            "AMD EPYC 7R13 Processor cpu9@3592MHz",
+            "AMD EPYC 7R13 Processor cpu10@3592MHz",
+            "AMD EPYC 7R13 Processor cpu11@3592MHz",
+            "AMD EPYC 7R13 Processor cpu12@3592MHz",
+            "AMD EPYC 7R13 Processor cpu13@3592MHz",
+            "AMD EPYC 7R13 Processor cpu14@3592MHz",
+            "AMD EPYC 7R13 Processor cpu15@3592MHz",
+            "AMD EPYC 7R13 Processor cpu16@3592MHz",
+            "AMD EPYC 7R13 Processor cpu17@3592MHz",
+            "AMD EPYC 7R13 Processor cpu18@3592MHz",
+            "AMD EPYC 7R13 Processor cpu19@3592MHz",
+            "AMD EPYC 7R13 Processor cpu20@3592MHz",
+            "AMD EPYC 7R13 Processor cpu21@3592MHz",
+            "AMD EPYC 7R13 Processor cpu22@3592MHz",
+            "AMD EPYC 7R13 Processor cpu23@3592MHz",
+            "AMD EPYC 7R13 Processor cpu24@3592MHz",
+            "AMD EPYC 7R13 Processor cpu25@3592MHz",
+            "AMD EPYC 7R13 Processor cpu26@3592MHz",
+            "AMD EPYC 7R13 Processor cpu27@3592MHz",
+            "AMD EPYC 7R13 Processor cpu28@3592MHz",
+            "AMD EPYC 7R13 Processor cpu29@3592MHz",
+            "AMD EPYC 7R13 Processor cpu30@3592MHz",
+            "AMD EPYC 7R13 Processor cpu31@3592MHz",
+            "AMD EPYC 7R13 Processor cpu32@3592MHz",
+            "AMD EPYC 7R13 Processor cpu33@3592MHz",
+            "AMD EPYC 7R13 Processor cpu34@3592MHz",
+            "AMD EPYC 7R13 Processor cpu35@2478MHz",
+            "AMD EPYC 7R13 Processor cpu36@3592MHz",
+            "AMD EPYC 7R13 Processor cpu37@3592MHz",
+            "AMD EPYC 7R13 Processor cpu38@3592MHz",
+            "AMD EPYC 7R13 Processor cpu39@3592MHz",
+            "AMD EPYC 7R13 Processor cpu40@3592MHz",
+            "AMD EPYC 7R13 Processor cpu41@3592MHz",
+            "AMD EPYC 7R13 Processor cpu42@3592MHz",
+            "AMD EPYC 7R13 Processor cpu43@3592MHz",
+            "AMD EPYC 7R13 Processor cpu44@3592MHz",
+            "AMD EPYC 7R13 Processor cpu45@3592MHz",
+            "AMD EPYC 7R13 Processor cpu46@3592MHz",
+            "AMD EPYC 7R13 Processor cpu47@3592MHz"
+        ],
+        "memory": "372.73 GB",
+        "os_name": "Ubuntu",
+        "os_version": "24.04",
+        "kernel": "6.14.0-1014-aws",
+        "hostname": "ip-10-90-1-47"
+    }
+}
