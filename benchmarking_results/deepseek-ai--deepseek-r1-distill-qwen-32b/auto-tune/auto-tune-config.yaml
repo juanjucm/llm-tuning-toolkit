@@ -34,7 +34,7 @@ scenario:
     # max_e2e_avg_ms: 100000
     min_success_rate: 0.8
 engine:
-  name: "vllm"
+  name: "vllm_dp"
   image: "vllm/vllm-openai:v0.11.0"
   devices: ["all"]
   base_args:
@@ -47,13 +47,13 @@ engine:
     - "--max-model-len"
     - *max_model_len
     - "--gpu-memory-utilization"
-    - "0.87"
+    - "0.9"
     - "--tensor-parallel-size"
-    - "4"
+    - "2"
+    - "--data-parallel-size"
+    - "2"
     - "--enable-chunked-prefill"
     - "--enable-prefix-caching"
-    - "--no-enable-log-requests"
-    - "--disable-log-stats"
   value_args_pool:
     # Value parameters (--param value)
     max-num-seqs: [128, 256]
