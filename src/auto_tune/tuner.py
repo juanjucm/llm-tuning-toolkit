@@ -285,10 +285,6 @@ class AutoTuner:
             str(scenario["max_vus"]),
             "--duration",
             scenario["throughput_duration"],
-            "--prompt-options",
-            scenario["prompt_options"],
-            "--decode-options",
-            scenario["decode_options"],
             "--tokenizer-name",
             self.config["model"],
             "--output-path",
@@ -296,6 +292,11 @@ class AutoTuner:
             "--run-id",
             run_id,
         ]
+
+        if scenario.get("prompt_options"):
+            bench_args.extend(["--prompt-options", scenario["prompt_options"]])
+        if scenario.get("decode_options"):
+            bench_args.extend(["--decode-options", scenario["decode_options"]])
 
         if scenario.get("dataset_file"):
             bench_args.extend(["--dataset-file", scenario["dataset_file"]])

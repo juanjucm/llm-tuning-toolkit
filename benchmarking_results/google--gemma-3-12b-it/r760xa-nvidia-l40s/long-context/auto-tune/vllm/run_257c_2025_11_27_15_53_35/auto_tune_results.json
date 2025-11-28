@@ -1,0 +1,788 @@
+{
+  "timestamp": "2025_11_27_15_53_35",
+  "config_file": "benchmarking_results/google--gemma-3-12b-it/r760xa-nvidia-l40s/long-context/auto-tune/auto-tune-config.yaml",
+  "engine_name": "vllm",
+  "instance_info": {
+    "gpu_type": "Nvidia L40S",
+    "gpu_count": 4
+  },
+  "goodput_criteria": {
+    "min_success_rate": 0.8
+  },
+  "scenario": {
+    "name": "long-context",
+    "prompt_options": "num_tokens=10000,min_tokens=8192,max_tokens=12000,variance=4096",
+    "decode_options": "num_tokens=512,min_tokens=64,max_tokens=1024,variance=128",
+    "dataset_file": "classification.json",
+    "throughput_duration": "90s",
+    "rate_duration": "30s",
+    "max_rate_finding_attempts": 3,
+    "rate_decrease_factor": 0.3,
+    "max_vus": 64,
+    "max_model_len": 32768,
+    "goodput_criteria": {
+      "min_success_rate": 0.8
+    }
+  },
+  "all_results": [
+    {
+      "run_id": "50b4",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 512
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "512"
+      ],
+      "metrics": {
+        "throughput": 0.8227240720213881,
+        "total_requests": 75,
+        "successful_requests": 75,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 46283.157,
+        "ttft_p95_ms": 46282.809,
+        "ttft_p90_ms": 46282.616,
+        "ttft_p80_ms": 46282.219,
+        "ttft_p70_ms": 46281.756,
+        "ttft_p60_ms": 46281.432,
+        "ttft_p50_ms": 46280.979,
+        "ttft_avg_ms": 34264.841,
+        "e2e_p99_ms": 87673.247,
+        "e2e_p95_ms": 80271.207,
+        "e2e_p90_ms": 79138.805,
+        "e2e_p80_ms": 76691.321,
+        "e2e_p70_ms": 73631.693,
+        "e2e_p60_ms": 72450.418,
+        "e2e_p50_ms": 70653.362,
+        "e2e_avg_ms": 64194.856,
+        "itl_p99_ms": 111.066,
+        "itl_p95_ms": 96.727,
+        "itl_p90_ms": 77.239,
+        "itl_p80_ms": 56.876,
+        "itl_p70_ms": 51.016,
+        "itl_p60_ms": 50.858,
+        "itl_p50_ms": 50.6,
+        "itl_avg_ms": 57.14
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "3223",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 2048
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "2048"
+      ],
+      "metrics": {
+        "throughput": 1.0325559278378873,
+        "total_requests": 93,
+        "successful_requests": 93,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 40923.982,
+        "ttft_p95_ms": 40923.5,
+        "ttft_p90_ms": 40923.07,
+        "ttft_p80_ms": 40922.427,
+        "ttft_p70_ms": 40922.072,
+        "ttft_p60_ms": 40921.613,
+        "ttft_p50_ms": 38515.932,
+        "ttft_avg_ms": 24295.163,
+        "e2e_p99_ms": 82362.367,
+        "e2e_p95_ms": 72246.06,
+        "e2e_p90_ms": 69014.208,
+        "e2e_p80_ms": 68279.239,
+        "e2e_p70_ms": 67761.641,
+        "e2e_p60_ms": 64444.289,
+        "e2e_p50_ms": 63465.213,
+        "e2e_avg_ms": 52700.775,
+        "itl_p99_ms": 115.019,
+        "itl_p95_ms": 103.441,
+        "itl_p90_ms": 79.65,
+        "itl_p80_ms": 55.072,
+        "itl_p70_ms": 50.318,
+        "itl_p60_ms": 50.294,
+        "itl_p50_ms": 50.207,
+        "itl_avg_ms": 56.885
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "e61a",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 8192
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "8192"
+      ],
+      "metrics": {
+        "throughput": 0.8442185659065232,
+        "total_requests": 76,
+        "successful_requests": 76,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 41084.422,
+        "ttft_p95_ms": 41084.189,
+        "ttft_p90_ms": 41083.4,
+        "ttft_p80_ms": 41082.831,
+        "ttft_p70_ms": 41082.486,
+        "ttft_p60_ms": 41081.852,
+        "ttft_p50_ms": 36354.59,
+        "ttft_avg_ms": 28466.911,
+        "e2e_p99_ms": 79437.872,
+        "e2e_p95_ms": 79275.636,
+        "e2e_p90_ms": 74793.8,
+        "e2e_p80_ms": 72545.968,
+        "e2e_p70_ms": 69295.4,
+        "e2e_p60_ms": 68036.617,
+        "e2e_p50_ms": 67552.613,
+        "e2e_avg_ms": 61570.265,
+        "itl_p99_ms": 111.767,
+        "itl_p95_ms": 100.143,
+        "itl_p90_ms": 88.07,
+        "itl_p80_ms": 72.294,
+        "itl_p70_ms": 65.702,
+        "itl_p60_ms": 53.592,
+        "itl_p50_ms": 50.966,
+        "itl_avg_ms": 61.582
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "99fd",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 16384
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "16384"
+      ],
+      "metrics": {
+        "throughput": 1.0123263282986728,
+        "total_requests": 92,
+        "successful_requests": 92,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 40993.963,
+        "ttft_p95_ms": 40993.747,
+        "ttft_p90_ms": 40993.35,
+        "ttft_p80_ms": 40992.93,
+        "ttft_p70_ms": 40992.364,
+        "ttft_p60_ms": 40991.802,
+        "ttft_p50_ms": 31858.143,
+        "ttft_avg_ms": 24127.804,
+        "e2e_p99_ms": 80620.432,
+        "e2e_p95_ms": 78306.219,
+        "e2e_p90_ms": 74194.574,
+        "e2e_p80_ms": 70519.539,
+        "e2e_p70_ms": 68198.773,
+        "e2e_p60_ms": 64745.742,
+        "e2e_p50_ms": 60862.927,
+        "e2e_avg_ms": 52851.895,
+        "itl_p99_ms": 127.19,
+        "itl_p95_ms": 113.167,
+        "itl_p90_ms": 88.523,
+        "itl_p80_ms": 65.4,
+        "itl_p70_ms": 50.743,
+        "itl_p60_ms": 50.718,
+        "itl_p50_ms": 50.677,
+        "itl_avg_ms": 59.714
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "ee36",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 128,
+          "max-num-batched-tokens": 512
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "512"
+      ],
+      "metrics": {
+        "throughput": 0.8666482933184125,
+        "total_requests": 79,
+        "successful_requests": 78,
+        "failed_requests": 1,
+        "success_rate": 0.9873417721518988,
+        "ttft_p99_ms": 46338.623,
+        "ttft_p95_ms": 46338.224,
+        "ttft_p90_ms": 46337.905,
+        "ttft_p80_ms": 46337.031,
+        "ttft_p70_ms": 46336.795,
+        "ttft_p60_ms": 46336.204,
+        "ttft_p50_ms": 43301.632,
+        "ttft_avg_ms": 31660.132,
+        "e2e_p99_ms": 82346.694,
+        "e2e_p95_ms": 81778.775,
+        "e2e_p90_ms": 80164.92,
+        "e2e_p80_ms": 76157.37,
+        "e2e_p70_ms": 74513.501,
+        "e2e_p60_ms": 71884.409,
+        "e2e_p50_ms": 70351.684,
+        "e2e_avg_ms": 60184.038,
+        "itl_p99_ms": 116.256,
+        "itl_p95_ms": 91.649,
+        "itl_p90_ms": 76.998,
+        "itl_p80_ms": 59.982,
+        "itl_p70_ms": 53.6,
+        "itl_p60_ms": 51.126,
+        "itl_p50_ms": 50.968,
+        "itl_avg_ms": 57.967
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9873417721518988,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "f264",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 128,
+          "max-num-batched-tokens": 2048
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "2048"
+      ],
+      "metrics": {
+        "throughput": 1.1222231108732963,
+        "total_requests": 101,
+        "successful_requests": 101,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 41258.753,
+        "ttft_p95_ms": 41257.893,
+        "ttft_p90_ms": 41257.586,
+        "ttft_p80_ms": 41256.964,
+        "ttft_p70_ms": 41256.093,
+        "ttft_p60_ms": 33840.481,
+        "ttft_p50_ms": 28896.965,
+        "ttft_avg_ms": 21600.862,
+        "e2e_p99_ms": 75236.207,
+        "e2e_p95_ms": 71518.575,
+        "e2e_p90_ms": 71289.126,
+        "e2e_p80_ms": 68123.462,
+        "e2e_p70_ms": 65666.742,
+        "e2e_p60_ms": 63079.614,
+        "e2e_p50_ms": 57267.441,
+        "e2e_avg_ms": 47847.025,
+        "itl_p99_ms": 157.098,
+        "itl_p95_ms": 99.46,
+        "itl_p90_ms": 78.574,
+        "itl_p80_ms": 68.302,
+        "itl_p70_ms": 51.214,
+        "itl_p60_ms": 50.691,
+        "itl_p50_ms": 50.614,
+        "itl_avg_ms": 60.462
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "d4a9",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 128,
+          "max-num-batched-tokens": 8192
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "8192"
+      ],
+      "metrics": {
+        "throughput": 1.0695429195336714,
+        "total_requests": 97,
+        "successful_requests": 97,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 40847.611,
+        "ttft_p95_ms": 40847.041,
+        "ttft_p90_ms": 40846.462,
+        "ttft_p80_ms": 40845.933,
+        "ttft_p70_ms": 40845.268,
+        "ttft_p60_ms": 40140.176,
+        "ttft_p50_ms": 29306.201,
+        "ttft_avg_ms": 22711.34,
+        "e2e_p99_ms": 79970.924,
+        "e2e_p95_ms": 77465.107,
+        "e2e_p90_ms": 71309.796,
+        "e2e_p80_ms": 65756.061,
+        "e2e_p70_ms": 64259.149,
+        "e2e_p60_ms": 61759.18,
+        "e2e_p50_ms": 60475.717,
+        "e2e_avg_ms": 50604.769,
+        "itl_p99_ms": 135.035,
+        "itl_p95_ms": 104.99,
+        "itl_p90_ms": 86.964,
+        "itl_p80_ms": 65.571,
+        "itl_p70_ms": 50.509,
+        "itl_p60_ms": 50.431,
+        "itl_p50_ms": 50.343,
+        "itl_avg_ms": 59.342
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "8130",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 128,
+          "max-num-batched-tokens": 16384
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "16384"
+      ],
+      "metrics": {
+        "throughput": 1.155506823775684,
+        "total_requests": 104,
+        "successful_requests": 104,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 41778.349,
+        "ttft_p95_ms": 41777.647,
+        "ttft_p90_ms": 41777.107,
+        "ttft_p80_ms": 41776.464,
+        "ttft_p70_ms": 41775.987,
+        "ttft_p60_ms": 38495.459,
+        "ttft_p50_ms": 32466.98,
+        "ttft_avg_ms": 22395.795,
+        "e2e_p99_ms": 79993.878,
+        "e2e_p95_ms": 72718.36,
+        "e2e_p90_ms": 70054.301,
+        "e2e_p80_ms": 66584.674,
+        "e2e_p70_ms": 64455.778,
+        "e2e_p60_ms": 63367.328,
+        "e2e_p50_ms": 59871.126,
+        "e2e_avg_ms": 48177.247,
+        "itl_p99_ms": 143.837,
+        "itl_p95_ms": 100.093,
+        "itl_p90_ms": 75.288,
+        "itl_p80_ms": 56.914,
+        "itl_p70_ms": 50.159,
+        "itl_p60_ms": 50.107,
+        "itl_p50_ms": 50.004,
+        "itl_avg_ms": 57.47
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "c263",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 256,
+          "max-num-batched-tokens": 2048
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "2048"
+      ],
+      "metrics": {
+        "throughput": 0.9964004930886455,
+        "total_requests": 90,
+        "successful_requests": 90,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 40998.626,
+        "ttft_p95_ms": 40998.034,
+        "ttft_p90_ms": 40997.586,
+        "ttft_p80_ms": 40996.876,
+        "ttft_p70_ms": 40996.192,
+        "ttft_p60_ms": 36080.199,
+        "ttft_p50_ms": 33607.378,
+        "ttft_avg_ms": 23800.365,
+        "e2e_p99_ms": 76428.435,
+        "e2e_p95_ms": 74593.679,
+        "e2e_p90_ms": 72492.111,
+        "e2e_p80_ms": 70808.269,
+        "e2e_p70_ms": 69584.792,
+        "e2e_p60_ms": 68006.147,
+        "e2e_p50_ms": 60929.998,
+        "e2e_avg_ms": 53394.104,
+        "itl_p99_ms": 130.962,
+        "itl_p95_ms": 98.065,
+        "itl_p90_ms": 80.946,
+        "itl_p80_ms": 66.064,
+        "itl_p70_ms": 60.275,
+        "itl_p60_ms": 51.976,
+        "itl_p50_ms": 50.381,
+        "itl_avg_ms": 59.942
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "0997",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 256,
+          "max-num-batched-tokens": 8192
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "8192"
+      ],
+      "metrics": {
+        "throughput": 1.142668684986446,
+        "total_requests": 103,
+        "successful_requests": 103,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 40724.546,
+        "ttft_p95_ms": 40724.089,
+        "ttft_p90_ms": 40723.63,
+        "ttft_p80_ms": 40723.186,
+        "ttft_p70_ms": 40722.473,
+        "ttft_p60_ms": 35448.503,
+        "ttft_p50_ms": 29201.05,
+        "ttft_avg_ms": 21604.586,
+        "e2e_p99_ms": 83381.87,
+        "e2e_p95_ms": 81859.147,
+        "e2e_p90_ms": 69609.441,
+        "e2e_p80_ms": 66772.568,
+        "e2e_p70_ms": 63816.135,
+        "e2e_p60_ms": 61756.834,
+        "e2e_p50_ms": 59145.893,
+        "e2e_avg_ms": 48251.48,
+        "itl_p99_ms": 159.056,
+        "itl_p95_ms": 112.436,
+        "itl_p90_ms": 80.296,
+        "itl_p80_ms": 61.969,
+        "itl_p70_ms": 50.183,
+        "itl_p60_ms": 50.092,
+        "itl_p50_ms": 49.999,
+        "itl_avg_ms": 59.273
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "3ec7",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 256,
+          "max-num-batched-tokens": 16384
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-12b-it",
+        "--port",
+        8000,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        32768,
+        "--gpu-memory-utilization",
+        "0.90",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--tensor-parallel-size",
+        "4",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "16384"
+      ],
+      "metrics": {
+        "throughput": 1.187789910636963,
+        "total_requests": 107,
+        "successful_requests": 107,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 41554.007,
+        "ttft_p95_ms": 41553.452,
+        "ttft_p90_ms": 41553.016,
+        "ttft_p80_ms": 41552.411,
+        "ttft_p70_ms": 41551.719,
+        "ttft_p60_ms": 41551.023,
+        "ttft_p50_ms": 30283.01,
+        "ttft_avg_ms": 21888.975,
+        "e2e_p99_ms": 72724.882,
+        "e2e_p95_ms": 70671.987,
+        "e2e_p90_ms": 69613.907,
+        "e2e_p80_ms": 66610.499,
+        "e2e_p70_ms": 63363.526,
+        "e2e_p60_ms": 60834.132,
+        "e2e_p50_ms": 59412.94,
+        "e2e_avg_ms": 46699.922,
+        "itl_p99_ms": 154.989,
+        "itl_p95_ms": 106.204,
+        "itl_p90_ms": 69.473,
+        "itl_p80_ms": 50.376,
+        "itl_p70_ms": 50.256,
+        "itl_p60_ms": 50.201,
+        "itl_p50_ms": 50.154,
+        "itl_avg_ms": 57.255
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    }
+  ]
+}
