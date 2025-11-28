@@ -509,6 +509,13 @@ class AutoTuner:
                     "value_args": dict(zip(value_param_names, value_combo)) if value_param_names else {},
                     "action_args": dict(zip(action_param_names, action_combo)) if action_param_names else {},
                 }
+
+                # Handle special case for tp-dp-combinations
+                if "tp-dp-combinations" in combination["value_args"].keys():
+                    tp_dp_comb = combination["value_args"].pop("tp-dp-combinations")
+                    combination["value_args"]["tensor_parallel_size"] = tp_dp_comb["tp"]
+                    combination["value_args"]["data_parallel_size"] = tp_dp_comb["dp"]
+            
                 combinations.append(combination)
 
         self.logger.info(
