@@ -107,7 +107,7 @@ class AutoTuner:
             self.logger.error(f"Failed to launch engine: {e}")
             return None
 
-    def _wait_for_server_ready(self, port: int, timeout: int = 700) -> bool:
+    def _wait_for_server_ready(self, container, port: int, timeout: int = 700) -> bool:
         """
         Wait for the server to be ready to accept requests.
         Args:
@@ -120,6 +120,12 @@ class AutoTuner:
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
+                # check if container is still running
+                container.reload()
+                if container.status != "running":
+                    self.logger.error("Engine container has stopped unexpectedly.")
+                    return False
+
                 response = requests.get(f"http://localhost:{port}/health", timeout=5)
                 if response.status_code == 200:
                     self.logger.info("Engine is ready!")
@@ -554,7 +560,7 @@ class AutoTuner:
                 if not container:
                     continue
 
-                if not self._wait_for_server_ready(self.config["port"]):
+                if not self._wait_for_server_ready(container, self.config["port"]):
                     self.logger.error("Server failed to start properly")
                     continue
 

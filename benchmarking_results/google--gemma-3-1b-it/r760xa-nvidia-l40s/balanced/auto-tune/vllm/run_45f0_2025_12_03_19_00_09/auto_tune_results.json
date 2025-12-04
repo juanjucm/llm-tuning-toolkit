@@ -1,0 +1,833 @@
+{
+  "timestamp": "2025_12_03_19_00_09",
+  "config_file": "benchmarking_results/google--gemma-3-1b-it/r760xa-nvidia-l40s/balanced/auto-tune/auto-tune-config.yaml",
+  "engine_name": "vllm",
+  "instance_info": {
+    "gpu_type": "Nvidia L40S",
+    "gpu_count": 1
+  },
+  "goodput_criteria": {
+    "min_success_rate": 0.9
+  },
+  "scenario": {
+    "name": "balanced",
+    "prompt_options": "num_tokens=1024,min_tokens=64,max_tokens=4096,variance=512",
+    "decode_options": "num_tokens=128,min_tokens=64,max_tokens=1024,variance=128",
+    "dataset_file": "share_gpt_filtered_small.json",
+    "throughput_duration": "90s",
+    "rate_duration": "30s",
+    "max_rate_finding_attempts": 3,
+    "rate_decrease_factor": 0.3,
+    "max_vus": 128,
+    "max_model_len": 8192,
+    "goodput_criteria": {
+      "min_success_rate": 0.9
+    }
+  },
+  "all_results": [
+    {
+      "run_id": "64c7",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 64
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "64"
+      ],
+      "metrics": {
+        "throughput": 17.299040264623045,
+        "total_requests": 1557,
+        "successful_requests": 1557,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 12472.251,
+        "ttft_p95_ms": 12291.962,
+        "ttft_p90_ms": 12142.632,
+        "ttft_p80_ms": 11846.077,
+        "ttft_p70_ms": 11507.175,
+        "ttft_p60_ms": 10256.474,
+        "ttft_p50_ms": 3254.348,
+        "ttft_avg_ms": 6178.53,
+        "e2e_p99_ms": 14412.579,
+        "e2e_p95_ms": 13567.26,
+        "e2e_p90_ms": 13107.949,
+        "e2e_p80_ms": 12591.67,
+        "e2e_p70_ms": 12189.669,
+        "e2e_p60_ms": 11261.292,
+        "e2e_p50_ms": 5148.497,
+        "e2e_avg_ms": 7277.693,
+        "itl_p99_ms": 9.849,
+        "itl_p95_ms": 9.789,
+        "itl_p90_ms": 9.762,
+        "itl_p80_ms": 9.735,
+        "itl_p70_ms": 9.707,
+        "itl_p60_ms": 9.668,
+        "itl_p50_ms": 9.527,
+        "itl_avg_ms": 7.985
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "1691",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 128
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "128"
+      ],
+      "metrics": {
+        "throughput": 33.372949874376395,
+        "total_requests": 3006,
+        "successful_requests": 3006,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 6433.179,
+        "ttft_p95_ms": 6116.083,
+        "ttft_p90_ms": 5916.168,
+        "ttft_p80_ms": 5725.364,
+        "ttft_p70_ms": 1635.607,
+        "ttft_p60_ms": 1503.176,
+        "ttft_p50_ms": 1441.473,
+        "ttft_avg_ms": 2552.71,
+        "e2e_p99_ms": 8289.654,
+        "e2e_p95_ms": 7468.485,
+        "e2e_p90_ms": 6910.625,
+        "e2e_p80_ms": 6278.925,
+        "e2e_p70_ms": 4424.438,
+        "e2e_p60_ms": 3616.794,
+        "e2e_p50_ms": 3041.704,
+        "e2e_avg_ms": 3773.897,
+        "itl_p99_ms": 9.923,
+        "itl_p95_ms": 9.805,
+        "itl_p90_ms": 9.761,
+        "itl_p80_ms": 9.697,
+        "itl_p70_ms": 9.646,
+        "itl_p60_ms": 9.602,
+        "itl_p50_ms": 9.557,
+        "itl_avg_ms": 8.777
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "32d8",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 512
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "512"
+      ],
+      "metrics": {
+        "throughput": 40.71818304813718,
+        "total_requests": 3665,
+        "successful_requests": 3665,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 3099.654,
+        "ttft_p95_ms": 2596.464,
+        "ttft_p90_ms": 2422.894,
+        "ttft_p80_ms": 1886.673,
+        "ttft_p70_ms": 1561.269,
+        "ttft_p60_ms": 1467.929,
+        "ttft_p50_ms": 1405.72,
+        "ttft_avg_ms": 1589.844,
+        "e2e_p99_ms": 7368.395,
+        "e2e_p95_ms": 5782.078,
+        "e2e_p90_ms": 4813.857,
+        "e2e_p80_ms": 3910.068,
+        "e2e_p70_ms": 3535.722,
+        "e2e_p60_ms": 3179.777,
+        "e2e_p50_ms": 2804.077,
+        "e2e_avg_ms": 3085.295,
+        "itl_p99_ms": 16.487,
+        "itl_p95_ms": 16.153,
+        "itl_p90_ms": 15.846,
+        "itl_p80_ms": 14.67,
+        "itl_p70_ms": 9.741,
+        "itl_p60_ms": 9.689,
+        "itl_p50_ms": 9.655,
+        "itl_avg_ms": 10.817
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "ec6a",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 2048
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "2048"
+      ],
+      "metrics": {
+        "throughput": 42.11081074124866,
+        "total_requests": 3790,
+        "successful_requests": 3790,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 2198.813,
+        "ttft_p95_ms": 2049.467,
+        "ttft_p90_ms": 1928.213,
+        "ttft_p80_ms": 1677.991,
+        "ttft_p70_ms": 1593.405,
+        "ttft_p60_ms": 1518.776,
+        "ttft_p50_ms": 1460.178,
+        "ttft_avg_ms": 1505.066,
+        "e2e_p99_ms": 6368.409,
+        "e2e_p95_ms": 5174.533,
+        "e2e_p90_ms": 4564.031,
+        "e2e_p80_ms": 3867.014,
+        "e2e_p70_ms": 3418.037,
+        "e2e_p60_ms": 3011.643,
+        "e2e_p50_ms": 2725.614,
+        "e2e_avg_ms": 2983.427,
+        "itl_p99_ms": 14.834,
+        "itl_p95_ms": 13.36,
+        "itl_p90_ms": 12.858,
+        "itl_p80_ms": 10.225,
+        "itl_p70_ms": 9.722,
+        "itl_p60_ms": 9.675,
+        "itl_p50_ms": 9.644,
+        "itl_avg_ms": 10.216
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "f3a3",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 64,
+          "max-num-batched-tokens": 8192
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "64",
+        "--max-num-batched-tokens",
+        "8192"
+      ],
+      "metrics": {
+        "throughput": 43.916179760891886,
+        "total_requests": 3953,
+        "successful_requests": 3953,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 2086.39,
+        "ttft_p95_ms": 1906.564,
+        "ttft_p90_ms": 1826.905,
+        "ttft_p80_ms": 1627.056,
+        "ttft_p70_ms": 1522.581,
+        "ttft_p60_ms": 1437.331,
+        "ttft_p50_ms": 1392.135,
+        "ttft_avg_ms": 1444.42,
+        "e2e_p99_ms": 6035.611,
+        "e2e_p95_ms": 4816.196,
+        "e2e_p90_ms": 4260.524,
+        "e2e_p80_ms": 3701.419,
+        "e2e_p70_ms": 3255.867,
+        "e2e_p60_ms": 2934.745,
+        "e2e_p50_ms": 2676.27,
+        "e2e_avg_ms": 2866.238,
+        "itl_p99_ms": 14.591,
+        "itl_p95_ms": 13.045,
+        "itl_p90_ms": 12.746,
+        "itl_p80_ms": 9.902,
+        "itl_p70_ms": 9.741,
+        "itl_p60_ms": 9.693,
+        "itl_p50_ms": 9.654,
+        "itl_avg_ms": 10.168
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "d422",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 128,
+          "max-num-batched-tokens": 128
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "128"
+      ],
+      "metrics": {
+        "throughput": 34.526719458256224,
+        "total_requests": 3109,
+        "successful_requests": 3109,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 6471.915,
+        "ttft_p95_ms": 6207.991,
+        "ttft_p90_ms": 6016.729,
+        "ttft_p80_ms": 5541.797,
+        "ttft_p70_ms": 203.178,
+        "ttft_p60_ms": 171.545,
+        "ttft_p50_ms": 165.233,
+        "ttft_avg_ms": 1598.974,
+        "e2e_p99_ms": 8521.487,
+        "e2e_p95_ms": 7657.509,
+        "e2e_p90_ms": 7083.781,
+        "e2e_p80_ms": 6351.648,
+        "e2e_p70_ms": 5284.268,
+        "e2e_p60_ms": 4021.108,
+        "e2e_p50_ms": 3084.103,
+        "e2e_avg_ms": 3642.129,
+        "itl_p99_ms": 17.146,
+        "itl_p95_ms": 16.925,
+        "itl_p90_ms": 16.858,
+        "itl_p80_ms": 16.79,
+        "itl_p70_ms": 16.739,
+        "itl_p60_ms": 16.703,
+        "itl_p50_ms": 16.666,
+        "itl_avg_ms": 14.167
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "b1dd",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 128,
+          "max-num-batched-tokens": 512
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "512"
+      ],
+      "metrics": {
+        "throughput": 46.463833388705815,
+        "total_requests": 4183,
+        "successful_requests": 4183,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 3088.667,
+        "ttft_p95_ms": 2346.851,
+        "ttft_p90_ms": 2112.07,
+        "ttft_p80_ms": 228.557,
+        "ttft_p70_ms": 91.719,
+        "ttft_p60_ms": 79.854,
+        "ttft_p50_ms": 70.966,
+        "ttft_avg_ms": 452.525,
+        "e2e_p99_ms": 7786.571,
+        "e2e_p95_ms": 6008.381,
+        "e2e_p90_ms": 5167.315,
+        "e2e_p80_ms": 4189.522,
+        "e2e_p70_ms": 3447.118,
+        "e2e_p60_ms": 2978.749,
+        "e2e_p50_ms": 2392.98,
+        "e2e_avg_ms": 2701.74,
+        "itl_p99_ms": 17.903,
+        "itl_p95_ms": 17.412,
+        "itl_p90_ms": 16.9,
+        "itl_p80_ms": 16.645,
+        "itl_p70_ms": 16.354,
+        "itl_p60_ms": 16.228,
+        "itl_p50_ms": 16.111,
+        "itl_avg_ms": 16.184
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "754d",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 128,
+          "max-num-batched-tokens": 2048
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "2048"
+      ],
+      "metrics": {
+        "throughput": 50.02119292224068,
+        "total_requests": 4502,
+        "successful_requests": 4502,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 1178.758,
+        "ttft_p95_ms": 136.059,
+        "ttft_p90_ms": 108.812,
+        "ttft_p80_ms": 92.638,
+        "ttft_p70_ms": 80.609,
+        "ttft_p60_ms": 74.648,
+        "ttft_p50_ms": 65.82,
+        "ttft_avg_ms": 98.059,
+        "e2e_p99_ms": 7474.395,
+        "e2e_p95_ms": 5760.245,
+        "e2e_p90_ms": 4921.006,
+        "e2e_p80_ms": 3992.494,
+        "e2e_p70_ms": 3232.804,
+        "e2e_p60_ms": 2562.219,
+        "e2e_p50_ms": 2045.007,
+        "e2e_avg_ms": 2512.86,
+        "itl_p99_ms": 25.465,
+        "itl_p95_ms": 23.309,
+        "itl_p90_ms": 22.681,
+        "itl_p80_ms": 16.81,
+        "itl_p70_ms": 16.355,
+        "itl_p60_ms": 16.205,
+        "itl_p50_ms": 16.124,
+        "itl_avg_ms": 17.258
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "1901",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 128,
+          "max-num-batched-tokens": 8192
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "128",
+        "--max-num-batched-tokens",
+        "8192"
+      ],
+      "metrics": {
+        "throughput": 48.6712394083985,
+        "total_requests": 4381,
+        "successful_requests": 4381,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 1133.219,
+        "ttft_p95_ms": 138.445,
+        "ttft_p90_ms": 112.562,
+        "ttft_p80_ms": 94.277,
+        "ttft_p70_ms": 82.162,
+        "ttft_p60_ms": 76.724,
+        "ttft_p50_ms": 67.249,
+        "ttft_avg_ms": 97.8,
+        "e2e_p99_ms": 7375.762,
+        "e2e_p95_ms": 5922.008,
+        "e2e_p90_ms": 5001.684,
+        "e2e_p80_ms": 3964.632,
+        "e2e_p70_ms": 3227.867,
+        "e2e_p60_ms": 2709.194,
+        "e2e_p50_ms": 2180.967,
+        "e2e_avg_ms": 2575.654,
+        "itl_p99_ms": 27.65,
+        "itl_p95_ms": 23.151,
+        "itl_p90_ms": 22.378,
+        "itl_p80_ms": 17.0,
+        "itl_p70_ms": 16.553,
+        "itl_p60_ms": 16.39,
+        "itl_p50_ms": 16.292,
+        "itl_avg_ms": 17.482
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "81b6",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 256,
+          "max-num-batched-tokens": 512
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "512"
+      ],
+      "metrics": {
+        "throughput": 48.42170699740924,
+        "total_requests": 4359,
+        "successful_requests": 4359,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 2095.164,
+        "ttft_p95_ms": 1670.961,
+        "ttft_p90_ms": 1590.482,
+        "ttft_p80_ms": 127.328,
+        "ttft_p70_ms": 91.006,
+        "ttft_p60_ms": 78.536,
+        "ttft_p50_ms": 67.487,
+        "ttft_avg_ms": 336.077,
+        "e2e_p99_ms": 6978.94,
+        "e2e_p95_ms": 5632.379,
+        "e2e_p90_ms": 4844.334,
+        "e2e_p80_ms": 3979.237,
+        "e2e_p70_ms": 3303.261,
+        "e2e_p60_ms": 2685.156,
+        "e2e_p50_ms": 2294.662,
+        "e2e_avg_ms": 2587.435,
+        "itl_p99_ms": 18.322,
+        "itl_p95_ms": 16.892,
+        "itl_p90_ms": 16.633,
+        "itl_p80_ms": 16.433,
+        "itl_p70_ms": 16.315,
+        "itl_p60_ms": 16.226,
+        "itl_p50_ms": 16.147,
+        "itl_avg_ms": 15.749
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "22b2",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 256,
+          "max-num-batched-tokens": 2048
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "2048"
+      ],
+      "metrics": {
+        "throughput": 50.883930492974464,
+        "total_requests": 4580,
+        "successful_requests": 4580,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 1117.338,
+        "ttft_p95_ms": 136.461,
+        "ttft_p90_ms": 107.565,
+        "ttft_p80_ms": 90.011,
+        "ttft_p70_ms": 79.488,
+        "ttft_p60_ms": 70.628,
+        "ttft_p50_ms": 65.772,
+        "ttft_avg_ms": 95.65,
+        "e2e_p99_ms": 7448.302,
+        "e2e_p95_ms": 5804.634,
+        "e2e_p90_ms": 4883.15,
+        "e2e_p80_ms": 3930.894,
+        "e2e_p70_ms": 3147.683,
+        "e2e_p60_ms": 2496.316,
+        "e2e_p50_ms": 1908.754,
+        "e2e_avg_ms": 2464.909,
+        "itl_p99_ms": 26.193,
+        "itl_p95_ms": 23.604,
+        "itl_p90_ms": 22.588,
+        "itl_p80_ms": 17.006,
+        "itl_p70_ms": 16.601,
+        "itl_p60_ms": 16.442,
+        "itl_p50_ms": 16.332,
+        "itl_avg_ms": 17.417
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "21a4",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 256,
+          "max-num-batched-tokens": 8192
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        8192,
+        "--gpu-memory-utilization",
+        "0.97",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "256",
+        "--max-num-batched-tokens",
+        "8192"
+      ],
+      "metrics": {
+        "throughput": 49.28947117888414,
+        "total_requests": 4438,
+        "successful_requests": 4438,
+        "failed_requests": 0,
+        "success_rate": 1.0,
+        "ttft_p99_ms": 1119.47,
+        "ttft_p95_ms": 166.697,
+        "ttft_p90_ms": 113.549,
+        "ttft_p80_ms": 92.608,
+        "ttft_p70_ms": 81.029,
+        "ttft_p60_ms": 76.69,
+        "ttft_p50_ms": 66.855,
+        "ttft_avg_ms": 100.118,
+        "e2e_p99_ms": 7555.093,
+        "e2e_p95_ms": 5936.313,
+        "e2e_p90_ms": 4982.617,
+        "e2e_p80_ms": 3921.822,
+        "e2e_p70_ms": 3287.248,
+        "e2e_p60_ms": 2633.533,
+        "e2e_p50_ms": 2102.268,
+        "e2e_avg_ms": 2544.485,
+        "itl_p99_ms": 27.205,
+        "itl_p95_ms": 23.253,
+        "itl_p90_ms": 22.514,
+        "itl_p80_ms": 17.013,
+        "itl_p70_ms": 16.591,
+        "itl_p60_ms": 16.415,
+        "itl_p50_ms": 16.277,
+        "itl_avg_ms": 17.45
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.9,
+          "success_rate": 1.0,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    }
+  ]
+}

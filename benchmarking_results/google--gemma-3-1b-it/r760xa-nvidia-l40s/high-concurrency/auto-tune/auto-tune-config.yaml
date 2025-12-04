@@ -1,0 +1,62 @@
+model: &model "google/gemma-3-1b-it"
+port: &port 80
+host: &host 0.0.0.0
+# Instance-specific info. Adapt when running bench on different instances.
+instance_info:
+  gpu_type: Nvidia L40S
+  gpu_count: 4
+
+# scenario config for auto-tuning
+scenario:
+  name: "high-concurrency"
+  prompt_options: "num_tokens=256,min_tokens=32,max_tokens=1024,variance=64"
+  decode_options: "num_tokens=64,min_tokens=32,max_tokens=512,variance=64"
+  dataset_file: share_gpt_filtered_small.json  # optional dataset file.
+  throughput_duration: "90s"
+  rate_duration: "30s"  
+  max_rate_finding_attempts: 3
+  rate_decrease_factor: 0.3
+  max_vus: 1024
+  max_model_len: &max_model_len 2048  # max model length (for vLLM)
+  goodput_criteria:
+    # Goodput SLOs - Performance requirements to meet for this scenario.
+    # Auto-Tuning goal is to find highest throughput configuration that meet these SLOs.
+    # Available values to check:
+    #   max_e2e_avg_ms
+    #   max_e2e_p99_ms
+    #   max_ttft_avg_ms
+    #   max_ttft_p99_ms
+    #   max_itl_avg_ms
+    #   max_itl_p99_ms
+    #   min_success_rate
+    #   min_throughput (req/s)
+    # If not specified, no check is done for that metric.
+    # max_e2e_avg_ms: 100000
+    min_success_rate: 0.8
+
+# Engine to test and its parameter pool (only one engine at a time)
+engine:
+  name: "vllm"
+  image: "vllm/vllm-openai:v0.11.2"
+  devices: ['0', '1', '2', '3']
+  base_args:
+    - "--model"
+    - *model
+    - --port
+    - *port
+    - "--dtype"
+    - "bfloat16"
+    - "--max-model-len"
+    - *max_model_len
+    - "--gpu-memory-utilization"
+    - "0.9"
+    - --enable-chunked-prefill
+    - --enable-prefix-caching
+  value_args_pool:
+    # Value parameters (--param value)
+    max-num-seqs: [512, 1024]
+    max-num-batched-tokens: [512, 1024, 2048, 8192, 16384]
+    # Tensor parallelism and data parallelism combinations.
+    tp-dp-combinations: [{tp: 1, dp: 4}]
+  action_args_pool:
+    # Action parameters (flags that can be included or excluded)

@@ -96,7 +96,7 @@
           "meets": true
         }
       ],
-      "is_best": true
+      "is_best": false
     },
     {
       "run_id": "02a3",
@@ -315,7 +315,7 @@
           "meets": true
         }
       ],
-      "is_best": true
+      "is_best": false
     },
     {
       "run_id": "281e",
@@ -534,7 +534,7 @@
           "meets": true
         }
       ],
-      "is_best": true
+      "is_best": false
     },
     {
       "run_id": "8397",
@@ -753,7 +753,7 @@
           "meets": true
         }
       ],
-      "is_best": true
+      "is_best": false
     },
     {
       "run_id": "ecfc",
@@ -972,7 +972,7 @@
           "meets": true
         }
       ],
-      "is_best": true
+      "is_best": false
     },
     {
       "run_id": "5cdd",

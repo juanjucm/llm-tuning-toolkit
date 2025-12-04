@@ -256,6 +256,9 @@ def main():
                 logger.error(
                     f"Requested engine/s are not defined for scenario {scenario['name']}. Defined engines for scenario {scenario['name']}: {[e['name'] for e in scenario['engines']]}"
                 )
+            
+            # Define scenario output directory
+            scenario_output_dir = os.path.join(args.output_path, scenario_name)
 
             for engine in engines_to_test:
                 run_id = generate_unique_run_id()
@@ -275,12 +278,13 @@ def main():
                         logger.error(f"Timeout - Server {engine_name} failed to start properly.")
                         continue
 
-                    scenario_output_dir = os.path.join(args.output_path, scenario_name)
-                    os.makedirs(scenario_output_dir, exist_ok=True)
+                    # Create output path
+                    # TODO: redefine folder structure. For now, dump results in scenario_name/benchmarking/
+                    bench_output_dir = os.path.join(scenario_output_dir, "benchmarking")
+                    os.makedirs(bench_output_dir, exist_ok=True)
 
-                    output_file_name = f"{engine_name}_{model.replace('/', '-')}_{run_id}.json"
-                    output_file_path = os.path.join(scenario_output_dir, output_file_name)
-
+                    output_file_name = f"{engine_name}_{run_id}.json"
+                    output_file_path = os.path.join(bench_output_dir, output_file_name)
                     # Remove HF token from envs to report
                     if "envs" in engine_config.keys():
                         if "HF_TOKEN" in engine_config["envs"]:

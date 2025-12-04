@@ -1,0 +1,141 @@
+model: &model google/gemma-3-12b-it
+port: &port 8000
+host: &host 0.0.0.0
+# Instance-specific info. Adapt when running bench on different instances.
+instance_info:
+  gpu_type: Nvidia L40S
+  gpu_count: 1
+
+scenarios:
+  - name: balanced
+    description: Balanced scenario with a good compromise between concurrency and context length.
+    bench_config:
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 128
+      - --prompt-options 
+      - "num_tokens=1024,min_tokens=64,max_tokens=4096,variance=512"
+      - --decode-options 
+      -  "num_tokens=128,min_tokens=64,max_tokens=1024,variance=128"
+      - --duration 
+      - "90s"
+      - --warmup 
+      - "30s"
+      - --sweep-cooldown
+      - "20s"
+      - --dataset-file
+      - share_gpt_filtered_small.json
+    engines:
+      - name: vLLM
+        image: vllm/vllm-openai:v0.11.2
+        devices: ['0', '1']
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16  
+          - --max_model_len 
+          - 8192 
+          - --gpu_memory_utilization 
+          - 0.97
+          - --max-num-seqs
+          - 64
+          - --max-num-batched-tokens
+          - 512
+          - --tensor-parallel-size
+          - 1
+          - --data-parallel-size
+          - 2
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+  - name: high-concurrency
+    description: High concurrency scenario focused on testing maximum throughput with many concurrent users.
+    bench_config:
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 1024
+      - --prompt-options 
+      - "num_tokens=256,min_tokens=32,max_tokens=1024,variance=64"
+      - --decode-options 
+      - "num_tokens=64,min_tokens=32,max_tokens=512,variance=64"
+      - --duration 
+      - "90s"
+      - --warmup 
+      - "30s"
+      - --sweep-cooldown
+      - "20s"
+      - --dataset-file
+      - share_gpt_filtered_small.json
+    engines:
+      - name: vLLM
+        image: vllm/vllm-openai:v0.11.2
+        devices: ['0', '1', '2', '3']
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16  
+          - --max_model_len 
+          - 1024
+          - --gpu_memory_utilization 
+          - 0.9
+          - --max-num-seqs 
+          - 1024
+          - --max-num-batched-tokens
+          - 1024
+          - --tensor-parallel-size
+          - 1
+          - --data-parallel-size
+          - 4
+          - --enable-chunked-prefill
+          - --enable-prefix-caching
+  - name: long-context
+    description: Long context scenario focused on testing long context lengths with fewer concurrent users.
+    bench_config:
+      - --tokenizer-name 
+      - *model
+      - --benchmark-kind 
+      - sweep
+      - --max-vus 
+      - 64
+      - --prompt-options 
+      - "num_tokens=10000,min_tokens=8192,max_tokens=12000,variance=4096"
+      - --decode-options 
+      - "num_tokens=512,min_tokens=64,max_tokens=1024,variance=128"
+      - --duration 
+      - "90s"
+      - --warmup 
+      - "30s"
+      - --sweep-cooldown
+      - "20s"
+      - --dataset-file 
+      - "classification.json"
+    engines:
+      - name: vLLM
+        image: vllm/vllm-openai:v0.11.2
+        devices: ['0', '1', '2', '3']
+        args:
+          - --model 
+          - *model
+          - --dtype 
+          - bfloat16 
+          - --max_model_len 
+          - 32768
+          - --gpu_memory_utilization 
+          - 0.95
+          - --max-num-seqs 
+          - 128
+          - --max-num-batched-tokens
+          - 2048
+          - --tensor-parallel-size
+          - 4
+          - --data-parallel-size
+          - 1
+          - --enable-chunked-prefill
+          - --enable-prefix-caching

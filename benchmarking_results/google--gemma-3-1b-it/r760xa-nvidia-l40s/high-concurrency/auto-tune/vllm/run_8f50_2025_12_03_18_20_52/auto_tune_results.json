@@ -1,0 +1,686 @@
+{
+  "timestamp": "2025_12_03_18_20_52",
+  "config_file": "benchmarking_results/google--gemma-3-1b-it/r760xa-nvidia-l40s/high-concurrency/auto-tune/auto-tune-config.yaml",
+  "engine_name": "vllm",
+  "instance_info": {
+    "gpu_type": "Nvidia L40S",
+    "gpu_count": 4
+  },
+  "goodput_criteria": {
+    "min_success_rate": 0.8
+  },
+  "scenario": {
+    "name": "high-concurrency",
+    "prompt_options": "num_tokens=256,min_tokens=32,max_tokens=1024,variance=64",
+    "decode_options": "num_tokens=64,min_tokens=32,max_tokens=512,variance=64",
+    "dataset_file": "share_gpt_filtered_small.json",
+    "throughput_duration": "90s",
+    "rate_duration": "30s",
+    "max_rate_finding_attempts": 3,
+    "rate_decrease_factor": 0.3,
+    "max_vus": 1024,
+    "max_model_len": 2048,
+    "goodput_criteria": {
+      "min_success_rate": 0.8
+    }
+  },
+  "all_results": [
+    {
+      "run_id": "40c3",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 512,
+          "max-num-batched-tokens": 512,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "512",
+        "--max-num-batched-tokens",
+        "512",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 337.0344939006238,
+        "total_requests": 30346,
+        "successful_requests": 30336,
+        "failed_requests": 10,
+        "success_rate": 0.9996704672774006,
+        "ttft_p99_ms": 21370.534,
+        "ttft_p95_ms": 2548.708,
+        "ttft_p90_ms": 2514.836,
+        "ttft_p80_ms": 2484.72,
+        "ttft_p70_ms": 2457.888,
+        "ttft_p60_ms": 2426.127,
+        "ttft_p50_ms": 2386.077,
+        "ttft_avg_ms": 2395.885,
+        "e2e_p99_ms": 21873.552,
+        "e2e_p95_ms": 3794.563,
+        "e2e_p90_ms": 3520.929,
+        "e2e_p80_ms": 3234.764,
+        "e2e_p70_ms": 3013.829,
+        "e2e_p60_ms": 2839.395,
+        "e2e_p50_ms": 2742.507,
+        "e2e_avg_ms": 2983.5,
+        "itl_p99_ms": 21.396,
+        "itl_p95_ms": 12.298,
+        "itl_p90_ms": 10.828,
+        "itl_p80_ms": 9.695,
+        "itl_p70_ms": 9.186,
+        "itl_p60_ms": 8.846,
+        "itl_p50_ms": 8.566,
+        "itl_avg_ms": 8.796
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996704672774006,
+          "meets": true
+        }
+      ],
+      "is_best": true
+    },
+    {
+      "run_id": "ad1d",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 512,
+          "max-num-batched-tokens": 1024,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "512",
+        "--max-num-batched-tokens",
+        "1024",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 312.3139554754934,
+        "total_requests": 28134,
+        "successful_requests": 28125,
+        "failed_requests": 9,
+        "success_rate": 0.9996801023672425,
+        "ttft_p99_ms": 13625.463,
+        "ttft_p95_ms": 2916.465,
+        "ttft_p90_ms": 2552.439,
+        "ttft_p80_ms": 2479.323,
+        "ttft_p70_ms": 2433.217,
+        "ttft_p60_ms": 2382.112,
+        "ttft_p50_ms": 2325.259,
+        "ttft_avg_ms": 2221.62,
+        "e2e_p99_ms": 13840.967,
+        "e2e_p95_ms": 6303.749,
+        "e2e_p90_ms": 4292.341,
+        "e2e_p80_ms": 3627.099,
+        "e2e_p70_ms": 3309.124,
+        "e2e_p60_ms": 3064.429,
+        "e2e_p50_ms": 2865.257,
+        "e2e_avg_ms": 3220.432,
+        "itl_p99_ms": 66.935,
+        "itl_p95_ms": 58.023,
+        "itl_p90_ms": 41.893,
+        "itl_p80_ms": 17.014,
+        "itl_p70_ms": 13.61,
+        "itl_p60_ms": 11.628,
+        "itl_p50_ms": 10.439,
+        "itl_avg_ms": 15.775
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996801023672425,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "0124",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 512,
+          "max-num-batched-tokens": 2048,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "512",
+        "--max-num-batched-tokens",
+        "2048",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 331.05899138758036,
+        "total_requests": 29816,
+        "successful_requests": 29806,
+        "failed_requests": 10,
+        "success_rate": 0.9996646096055809,
+        "ttft_p99_ms": 19332.248,
+        "ttft_p95_ms": 2556.171,
+        "ttft_p90_ms": 2511.006,
+        "ttft_p80_ms": 2467.129,
+        "ttft_p70_ms": 2428.361,
+        "ttft_p60_ms": 2389.824,
+        "ttft_p50_ms": 2340.52,
+        "ttft_avg_ms": 2355.678,
+        "e2e_p99_ms": 19923.833,
+        "e2e_p95_ms": 3966.643,
+        "e2e_p90_ms": 3643.007,
+        "e2e_p80_ms": 3309.432,
+        "e2e_p70_ms": 3084.773,
+        "e2e_p60_ms": 2886.516,
+        "e2e_p50_ms": 2768.845,
+        "e2e_avg_ms": 3037.27,
+        "itl_p99_ms": 23.722,
+        "itl_p95_ms": 14.499,
+        "itl_p90_ms": 13.132,
+        "itl_p80_ms": 11.781,
+        "itl_p70_ms": 11.027,
+        "itl_p60_ms": 10.382,
+        "itl_p50_ms": 9.837,
+        "itl_avg_ms": 10.2
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996646096055809,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "668f",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 512,
+          "max-num-batched-tokens": 8192,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "512",
+        "--max-num-batched-tokens",
+        "8192",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 332.7626260659606,
+        "total_requests": 29969,
+        "successful_requests": 29959,
+        "failed_requests": 10,
+        "success_rate": 0.9996663218659281,
+        "ttft_p99_ms": 18807.171,
+        "ttft_p95_ms": 2538.941,
+        "ttft_p90_ms": 2493.015,
+        "ttft_p80_ms": 2441.576,
+        "ttft_p70_ms": 2406.648,
+        "ttft_p60_ms": 2370.114,
+        "ttft_p50_ms": 2329.085,
+        "ttft_avg_ms": 2332.108,
+        "e2e_p99_ms": 19406.43,
+        "e2e_p95_ms": 3947.675,
+        "e2e_p90_ms": 3641.403,
+        "e2e_p80_ms": 3301.934,
+        "e2e_p70_ms": 3066.389,
+        "e2e_p60_ms": 2876.18,
+        "e2e_p50_ms": 2755.679,
+        "e2e_avg_ms": 3018.594,
+        "itl_p99_ms": 22.02,
+        "itl_p95_ms": 15.087,
+        "itl_p90_ms": 13.422,
+        "itl_p80_ms": 12.021,
+        "itl_p70_ms": 11.105,
+        "itl_p60_ms": 10.451,
+        "itl_p50_ms": 9.853,
+        "itl_avg_ms": 10.201
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996663218659281,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "7d6c",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 512,
+          "max-num-batched-tokens": 16384,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "512",
+        "--max-num-batched-tokens",
+        "16384",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 333.7848462470844,
+        "total_requests": 30066,
+        "successful_requests": 30056,
+        "failed_requests": 10,
+        "success_rate": 0.9996673983902082,
+        "ttft_p99_ms": 17247.456,
+        "ttft_p95_ms": 2556.948,
+        "ttft_p90_ms": 2512.934,
+        "ttft_p80_ms": 2461.36,
+        "ttft_p70_ms": 2421.764,
+        "ttft_p60_ms": 2381.61,
+        "ttft_p50_ms": 2336.222,
+        "ttft_avg_ms": 2306.851,
+        "e2e_p99_ms": 18103.677,
+        "e2e_p95_ms": 3982.84,
+        "e2e_p90_ms": 3665.054,
+        "e2e_p80_ms": 3341.256,
+        "e2e_p70_ms": 3096.206,
+        "e2e_p60_ms": 2891.163,
+        "e2e_p50_ms": 2770.142,
+        "e2e_avg_ms": 3013.201,
+        "itl_p99_ms": 23.939,
+        "itl_p95_ms": 15.702,
+        "itl_p90_ms": 13.891,
+        "itl_p80_ms": 12.267,
+        "itl_p70_ms": 11.433,
+        "itl_p60_ms": 10.697,
+        "itl_p50_ms": 10.014,
+        "itl_avg_ms": 10.464
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996673983902082,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "ab08",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 1024,
+          "max-num-batched-tokens": 1024,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "1024",
+        "--max-num-batched-tokens",
+        "1024",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 324.9583500185236,
+        "total_requests": 29266,
+        "successful_requests": 29256,
+        "failed_requests": 10,
+        "success_rate": 0.9996583065673478,
+        "ttft_p99_ms": 16290.429,
+        "ttft_p95_ms": 2615.003,
+        "ttft_p90_ms": 2566.327,
+        "ttft_p80_ms": 2514.59,
+        "ttft_p70_ms": 2470.847,
+        "ttft_p60_ms": 2429.001,
+        "ttft_p50_ms": 2376.675,
+        "ttft_avg_ms": 2325.882,
+        "e2e_p99_ms": 17529.06,
+        "e2e_p95_ms": 4085.836,
+        "e2e_p90_ms": 3772.732,
+        "e2e_p80_ms": 3425.976,
+        "e2e_p70_ms": 3181.751,
+        "e2e_p60_ms": 2981.295,
+        "e2e_p50_ms": 2839.866,
+        "e2e_avg_ms": 3092.672,
+        "itl_p99_ms": 30.661,
+        "itl_p95_ms": 19.973,
+        "itl_p90_ms": 16.801,
+        "itl_p80_ms": 13.975,
+        "itl_p70_ms": 12.478,
+        "itl_p60_ms": 11.233,
+        "itl_p50_ms": 10.397,
+        "itl_avg_ms": 11.466
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996583065673478,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "f925",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 1024,
+          "max-num-batched-tokens": 2048,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "1024",
+        "--max-num-batched-tokens",
+        "2048",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 323.45158471972434,
+        "total_requests": 29131,
+        "successful_requests": 29122,
+        "failed_requests": 9,
+        "success_rate": 0.9996910507706567,
+        "ttft_p99_ms": 19571.583,
+        "ttft_p95_ms": 2633.333,
+        "ttft_p90_ms": 2587.621,
+        "ttft_p80_ms": 2538.594,
+        "ttft_p70_ms": 2501.957,
+        "ttft_p60_ms": 2463.807,
+        "ttft_p50_ms": 2413.415,
+        "ttft_avg_ms": 2416.71,
+        "e2e_p99_ms": 20223.186,
+        "e2e_p95_ms": 4071.261,
+        "e2e_p90_ms": 3742.89,
+        "e2e_p80_ms": 3410.298,
+        "e2e_p70_ms": 3164.713,
+        "e2e_p60_ms": 2967.666,
+        "e2e_p50_ms": 2847.193,
+        "e2e_avg_ms": 3107.291,
+        "itl_p99_ms": 22.286,
+        "itl_p95_ms": 14.644,
+        "itl_p90_ms": 13.164,
+        "itl_p80_ms": 11.729,
+        "itl_p70_ms": 10.876,
+        "itl_p60_ms": 10.284,
+        "itl_p50_ms": 9.834,
+        "itl_avg_ms": 10.136
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996910507706567,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "0e37",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 1024,
+          "max-num-batched-tokens": 8192,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "1024",
+        "--max-num-batched-tokens",
+        "8192",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 330.28258699809663,
+        "total_requests": 29732,
+        "successful_requests": 29723,
+        "failed_requests": 9,
+        "success_rate": 0.9996972958428629,
+        "ttft_p99_ms": 18772.077,
+        "ttft_p95_ms": 2556.406,
+        "ttft_p90_ms": 2504.161,
+        "ttft_p80_ms": 2456.265,
+        "ttft_p70_ms": 2414.073,
+        "ttft_p60_ms": 2367.961,
+        "ttft_p50_ms": 2316.944,
+        "ttft_avg_ms": 2319.026,
+        "e2e_p99_ms": 19338.61,
+        "e2e_p95_ms": 4026.313,
+        "e2e_p90_ms": 3697.69,
+        "e2e_p80_ms": 3355.916,
+        "e2e_p70_ms": 3119.986,
+        "e2e_p60_ms": 2909.778,
+        "e2e_p50_ms": 2783.123,
+        "e2e_avg_ms": 3044.533,
+        "itl_p99_ms": 23.844,
+        "itl_p95_ms": 15.641,
+        "itl_p90_ms": 13.906,
+        "itl_p80_ms": 12.364,
+        "itl_p70_ms": 11.511,
+        "itl_p60_ms": 10.819,
+        "itl_p50_ms": 10.218,
+        "itl_avg_ms": 10.638
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996972958428629,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    },
+    {
+      "run_id": "68a0",
+      "tunable_parameters_config": {
+        "value_args": {
+          "max-num-seqs": 1024,
+          "max-num-batched-tokens": 16384,
+          "tensor_parallel_size": 1,
+          "data_parallel_size": 4
+        },
+        "action_args": {}
+      },
+      "engine_container_command": [
+        "--model",
+        "google/gemma-3-1b-it",
+        "--port",
+        80,
+        "--dtype",
+        "bfloat16",
+        "--max-model-len",
+        2048,
+        "--gpu-memory-utilization",
+        "0.9",
+        "--enable-chunked-prefill",
+        "--enable-prefix-caching",
+        "--max-num-seqs",
+        "1024",
+        "--max-num-batched-tokens",
+        "16384",
+        "--tensor-parallel-size",
+        "1",
+        "--data-parallel-size",
+        "4"
+      ],
+      "metrics": {
+        "throughput": 332.9089902873413,
+        "total_requests": 29979,
+        "successful_requests": 29969,
+        "failed_requests": 10,
+        "success_rate": 0.9996664331698856,
+        "ttft_p99_ms": 17062.943,
+        "ttft_p95_ms": 2559.127,
+        "ttft_p90_ms": 2507.512,
+        "ttft_p80_ms": 2451.038,
+        "ttft_p70_ms": 2408.084,
+        "ttft_p60_ms": 2364.106,
+        "ttft_p50_ms": 2311.874,
+        "ttft_avg_ms": 2304.09,
+        "e2e_p99_ms": 18180.433,
+        "e2e_p95_ms": 4051.269,
+        "e2e_p90_ms": 3714.406,
+        "e2e_p80_ms": 3339.512,
+        "e2e_p70_ms": 3092.76,
+        "e2e_p60_ms": 2890.34,
+        "e2e_p50_ms": 2770.83,
+        "e2e_avg_ms": 3020.049,
+        "itl_p99_ms": 23.106,
+        "itl_p95_ms": 15.849,
+        "itl_p90_ms": 14.003,
+        "itl_p80_ms": 12.379,
+        "itl_p70_ms": 11.465,
+        "itl_p60_ms": 10.816,
+        "itl_p50_ms": 10.229,
+        "itl_avg_ms": 10.628
+      },
+      "goodput_checks": [
+        {
+          "min_success_rate": 0.8,
+          "success_rate": 0.9996664331698856,
+          "meets": true
+        }
+      ],
+      "is_best": false
+    }
+  ]
+}
