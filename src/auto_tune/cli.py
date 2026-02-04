@@ -7,9 +7,9 @@ from auto_tune.tuner import AutoTuner
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 parser = argparse.ArgumentParser(description="Auto-tune tool for finding optimal engine parameters.")
-parser.add_argument("--config", default="./auto-tune-config.yaml", help="Path to auto-tune configuration file")
+parser.add_argument("--config", help="Path to auto-tune configuration file", required=True)
 parser.add_argument("--result-dir", default="", help="Directory to save tuning results")
-parser.add_argument("--dataset-id", default="hf-dell-internal/benchmarks", help="Huggingface dataset where to dump resutls")
+parser.add_argument("--dataset-id", help="Huggingface dataset where to dump resutls")
 parser.add_argument("--hf-token", default=HF_TOKEN, help="Huggingface token to use for accesing the datset.")
 
 
