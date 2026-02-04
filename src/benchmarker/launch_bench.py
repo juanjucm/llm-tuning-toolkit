@@ -56,6 +56,8 @@ def parse_arguments() -> argparse.Namespace:
         "--output-path", type=str, help="Directory to save benchmark results", default="./results"
     )
     parser.add_argument("--show-logs", action="store_true", help="Show engine container logs.")
+    
+    # TODO: add hf dataset and token args.
 
     return parser.parse_args()
 

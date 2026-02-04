@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import subprocess
+import tempfile
 import time
 import uuid
 from datetime import datetime
@@ -13,6 +14,7 @@ import coloredlogs
 import docker
 import requests
 import yaml
+from huggingface_hub import hf_api
 
 coloredlogs.install()
 
@@ -21,13 +23,28 @@ BENCHMARK_TOOL_CMD = "inference-benchmarker"
 
 
 class AutoTuner:
-    def __init__(self, config_path: str, result_dir: str):
+    def __init__(self, config_path: str, result_dir: str, dataset_id: str, hf_token: str):
         self.config_path = config_path
         self.config = self._load_config()
-        self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-        self.results_dir = Path(result_dir)
-        self.results_dir.mkdir(exist_ok=True)
+         
+        if not result_dir:
+            self.results_dir = tempfile.TemporaryDirectory()
+        else:
+            self.results_dir = Path(result_dir)
+        
+        # Create folder structure for results
+        self.results_dir = self.results_dir.joinpath(self.config['model'], \
+                                                     self.config["instance_info"]["gpu_type"], \
+                                                     self.config["scenario"]["name"], \
+                                                     "auto-tune"
+                                                    )
+        self.results_dir.mkdir(parents=True, exist_ok=True)
+
+        self.dataset_id = dataset_id
+        self.hf_token = hf_token
+        
         self.best_throughput = 0
+        self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 
         # Set up logging
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -550,6 +567,7 @@ class AutoTuner:
             self.logger.info(f"{'=' * 60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
 
+            # TODO: add model_name metadata to the run_id.
             run_id = uuid.uuid4().hex[:4]
 
             # TODO: if throughput is a goodput criteria, only perform throughput benchmark.
@@ -651,6 +669,15 @@ class AutoTuner:
                 indent=2,
             )
 
+        # Upload folder to Huggingface dataset
+        self.logger.info(f"Uploading results to Huggingface dataset {self.dataset_id}...\n")
+        hf_api.upload_folder(
+            folder_path=self.results_dir,
+            repo_id=self.dataset_id,
+            token=self.hf_token,
+            repo_type="dataset",
+        )
+        
         # Print summary
         self.logger.info(f"{'=' * 60}")
         self.logger.info("AUTO-TUNE COMPLETE")

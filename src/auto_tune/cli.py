@@ -4,9 +4,13 @@ import sys
 
 from auto_tune.tuner import AutoTuner
 
+HF_TOKEN = os.getenv("HF_TOKEN", "")
+
 parser = argparse.ArgumentParser(description="Auto-tune tool for finding optimal engine parameters.")
 parser.add_argument("--config", default="./auto-tune-config.yaml", help="Path to auto-tune configuration file")
-parser.add_argument("--result-dir", default="./auto_tune_results", help="Directory to save tuning results")
+parser.add_argument("--result-dir", default="", help="Directory to save tuning results")
+parser.add_argument("--dataset-id", default="hf-dell-internal/benchmarks", help="Huggingface dataset where to dump resutls")
+parser.add_argument("--hf-token", default=HF_TOKEN, help="Huggingface token to use for accesing the datset.")
 
 
 def main() -> None:
@@ -16,5 +20,5 @@ def main() -> None:
         print(f"Error: Configuration file not found: {args.config}")
         sys.exit(1)
 
-    tuner = AutoTuner(args.config, args.result_dir)
+    tuner = AutoTuner(args.config, args.result_dir, args.dataset_id, args.hf_token)
     tuner.run_auto_tune()
