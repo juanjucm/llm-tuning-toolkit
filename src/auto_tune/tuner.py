@@ -53,7 +53,10 @@ class AutoTuner:
         self.dataset_id = dataset_id
         self.hf_token = hf_token or HF_TOKEN
 
-        self.best_throughput = 0
+        self.best_throughput = {
+            "run_index": None,
+            "throughput": 0,
+        }
         self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 
         # Set up logging
@@ -613,7 +616,7 @@ class AutoTuner:
                 if not meets:
                     # if 90% of throughput is less than best found so far, skip rate finding.
                     # rate finding starts at 90% of throughput.
-                    if (metrics["throughput"] * 0.90) <= self.best_throughput:
+                    if (metrics["throughput"] * 0.90) <= self.best_throughput["throughput"]:
                         self.logger.info(
                             "Goodput criteria not met, but throughput is worse than best found so far. Skipping rate finding..."
                         )
@@ -648,12 +651,18 @@ class AutoTuner:
                     "goodput_checks": goodput_checks,
                     "is_best": False,
                 }
-                if metrics["throughput"] > self.best_throughput:
-                    self.best_throughput = metrics["throughput"]
-                    self.logger.info(f"NEW BEST CONFIG! Throughput: {self.best_throughput:.2f} req/s")
+                if metrics["throughput"] > self.best_throughput["throughput"]:
+                    last_best = self.best_throughput["run_index"]
+                    self.best_throughput = {
+                        "throughput": metrics["throughput"],
+                        "run_index": i,
+                    }
+                    self.logger.info(
+                        f"NEW BEST CONFIG! Throughput: {self.best_throughput['throughput']:.2f} req/s"
+                    )
                     result["is_best"] = True
-                    if all_results:
-                        all_results[-1]["is_best"] = False
+                    if all_results and last_best is not None:
+                        all_results[last_best - 1]["is_best"] = False
 
                 all_results.append(result)
             except Exception as e:
