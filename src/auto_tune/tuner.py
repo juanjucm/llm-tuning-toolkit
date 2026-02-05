@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -565,11 +566,14 @@ class AutoTuner:
 
         # TODO: extend to support multiple engine auto-tuning.
         engine_name = self.config["engine"]["name"]
-        run_id = uuid.uuid4().hex[:4]
-        engine_path = self.results_dir.joinpath(engine_name, f"run_{self.timestamp}_{run_id}")
+        autotune_id = uuid.uuid4().hex[:4]
+        engine_path = self.results_dir.joinpath(engine_name, f"run_{self.timestamp}_{autotune_id}")
         engine_path.mkdir(parents=True, exist_ok=True)
 
         param_combinations = self._generate_parameter_combinations()
+
+        # Copy config file to results folder
+        shutil.copy2(self.config_path, engine_path / "auto_tune_config.yaml")
 
         all_results = []
         for i, param_config in enumerate(param_combinations, 1):
