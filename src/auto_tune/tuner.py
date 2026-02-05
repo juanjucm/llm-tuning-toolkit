@@ -42,7 +42,7 @@ class AutoTuner:
 
         # Create folder structure for results
         self.results_dir = self.root_dir.joinpath(
-            self.config["model"],
+            self.config["model"].replace("/", "--"),
             self.config["instance_info"]["gpu_type"],
             self.config["scenario"]["name"],
             "auto-tune",
