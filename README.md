@@ -34,15 +34,16 @@ This module provides a way to automatically detect the best LLM serving configur
 For running the script, make sure to provide a valid config yaml. Take a loot at `auto-tune-config.yaml` to check the format and expected parameters.
 
 ```console
-usage: uv run auto-tune [-h] [--config CONFIG] [--result-dir RESULT_DIR]
+usage: uv run auto-tune [-h] [--config <config.yaml>] [--result-dir <result_dir>] [--dataset-id <dataset_id>] [--hf-token <hf_token>]
 
 Auto-tune tool for finding optimal engine parameters.
 
 options:
-  -h, --help            show this help message and exit
-  --config CONFIG       Path to auto-tune configuration file
-  --result-dir RESULT_DIR
-                        Directory to save tuning results
+  -h, --help    show this help message and exit
+  --config      Path to auto-tune configuration file
+  --result-dir (optional) Directory to save tuning results
+  --dataset-id (optional) Huggingface dataset where to dump results
+  --hf-token   (optional) Huggingface token to use for accesing models and dataset.
 ```
 
 ## Multi Benchmarking Usage

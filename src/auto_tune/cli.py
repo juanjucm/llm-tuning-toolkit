@@ -10,7 +10,7 @@ parser = argparse.ArgumentParser(description="Auto-tune tool for finding optimal
 parser.add_argument("--config", help="Path to auto-tune configuration file", required=True)
 parser.add_argument("--result-dir", default="", help="Directory to save tuning results")
 parser.add_argument("--dataset-id", help="Huggingface dataset where to dump resutls")
-parser.add_argument("--hf-token", default=HF_TOKEN, help="Huggingface token to use for accesing the datset.")
+parser.add_argument("--hf-token", default=HF_TOKEN, help="Huggingface token to use for accesing models and dataset.")
 
 
 def main() -> None:
