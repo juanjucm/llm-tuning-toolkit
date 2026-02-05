@@ -26,23 +26,26 @@ class AutoTuner:
     def __init__(self, config_path: str, result_dir: str, dataset_id: str, hf_token: str):
         self.config_path = config_path
         self.config = self._load_config()
-         
+
         if not result_dir:
-            self.results_dir = tempfile.TemporaryDirectory()
+            temp_dir = tempfile.TemporaryDirectory()
+            self.root_dir = Path(temp_dir.name)
         else:
-            self.results_dir = Path(result_dir)
-        
+            self.root_dir = Path(result_dir)
+
         # Create folder structure for results
-        self.results_dir = self.results_dir.joinpath(self.config['model'], \
-                                                     self.config["instance_info"]["gpu_type"], \
-                                                     self.config["scenario"]["name"], \
-                                                     "auto-tune"
-                                                    )
+        self.results_dir = self.root_dir.joinpath(
+            self.config["model"],
+            self.config["instance_info"]["gpu_type"],
+            self.config["scenario"]["name"],
+            "auto-tune",
+        )
+
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
         self.dataset_id = dataset_id
         self.hf_token = hf_token
-        
+
         self.best_throughput = 0
         self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 
@@ -104,7 +107,7 @@ class AutoTuner:
             container_name = f"autotune_engine_{int(time.time())}"
             self.logger.info(f"Starting engine container: {container_name}")
 
-            devices = engine_config['devices']
+            devices = engine_config["devices"]
             device_requests = [docker.types.DeviceRequest(device_ids=devices, capabilities=[["gpu"]])]
 
             container = self.docker_client.containers.run(
@@ -115,7 +118,7 @@ class AutoTuner:
                 detach=True,
                 name=container_name,
                 device_requests=device_requests,
-                stop_signal="SIGTERM"
+                stop_signal="SIGTERM",
             )
 
             return container
@@ -538,7 +541,7 @@ class AutoTuner:
                     tp_dp_comb = combination["value_args"].pop("tp-dp-combinations")
                     combination["value_args"]["tensor_parallel_size"] = tp_dp_comb["tp"]
                     combination["value_args"]["data_parallel_size"] = tp_dp_comb["dp"]
-            
+
                 combinations.append(combination)
 
         self.logger.info(
@@ -673,11 +676,12 @@ class AutoTuner:
         self.logger.info(f"Uploading results to Huggingface dataset {self.dataset_id}...\n")
         hf_api.upload_folder(
             folder_path=self.results_dir,
+            path_in_repo=str(self.results_dir.relative_to(self.root_dir)),
             repo_id=self.dataset_id,
             token=self.hf_token,
             repo_type="dataset",
         )
-        
+
         # Print summary
         self.logger.info(f"{'=' * 60}")
         self.logger.info("AUTO-TUNE COMPLETE")
