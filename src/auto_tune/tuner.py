@@ -23,7 +23,13 @@ BENCHMARK_TOOL_CMD = "inference-benchmarker"
 
 
 class AutoTuner:
-    def __init__(self, config_path: str, result_dir: str, dataset_id: str, hf_token: str):
+    def __init__(
+        self,
+        config_path: str,
+        result_dir: Optional[str] = None,
+        dataset_id: Optional[str] = None,
+        hf_token: Optional[str] = None,
+    ):
         self.config_path = config_path
         self.config = self._load_config()
 
@@ -44,7 +50,7 @@ class AutoTuner:
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
         self.dataset_id = dataset_id
-        self.hf_token = hf_token
+        self.hf_token = hf_token or HF_TOKEN
 
         self.best_throughput = 0
         self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
@@ -113,7 +119,7 @@ class AutoTuner:
             container = self.docker_client.containers.run(
                 image=engine_config["image"],
                 command=" ".join([str(a) for a in engine_args]),
-                environment={"HF_TOKEN": HF_TOKEN},
+                environment={"HF_TOKEN": self.hf_token},
                 ports={f"{port}/tcp": port},
                 detach=True,
                 name=container_name,
@@ -672,15 +678,16 @@ class AutoTuner:
                 indent=2,
             )
 
-        # Upload folder to Huggingface dataset
-        self.logger.info(f"Uploading results to Huggingface dataset {self.dataset_id}...\n")
-        hf_api.upload_folder(
-            folder_path=self.results_dir,
-            path_in_repo=str(self.results_dir.relative_to(self.root_dir)),
-            repo_id=self.dataset_id,
-            token=self.hf_token,
-            repo_type="dataset",
-        )
+        # Upload folder to Huggingface dataset if dataset_id is provided
+        if self.dataset_id:
+            self.logger.info(f"Uploading results to Huggingface dataset {self.dataset_id}...\n")
+            hf_api.upload_folder(
+                folder_path=self.results_dir,
+                path_in_repo=str(self.results_dir.relative_to(self.root_dir)),
+                repo_id=self.dataset_id,
+                token=self.hf_token,
+                repo_type="dataset",
+            )
 
         # Print summary
         self.logger.info(f"{'=' * 60}")
