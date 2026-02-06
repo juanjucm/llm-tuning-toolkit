@@ -655,14 +655,14 @@ class AutoTuner:
                     last_best = self.best_throughput["run_index"]
                     self.best_throughput = {
                         "throughput": metrics["throughput"],
-                        "run_index": i,
+                        "run_index": len(all_results),
                     }
                     self.logger.info(
                         f"NEW BEST CONFIG! Throughput: {self.best_throughput['throughput']:.2f} req/s"
                     )
                     result["is_best"] = True
                     if all_results and last_best is not None:
-                        all_results[last_best - 1]["is_best"] = False
+                        all_results[last_best]["is_best"] = False
 
                 all_results.append(result)
             except Exception as e:
