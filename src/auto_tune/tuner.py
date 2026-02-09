@@ -15,13 +15,14 @@ import coloredlogs
 import docker
 import requests
 import yaml
-from huggingface_hub import hf_api
+from huggingface_hub import HfApi
 
 coloredlogs.install()
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 BENCHMARK_TOOL_CMD = "inference-benchmarker"
 
+hf_api = HfApi()
 
 class AutoTuner:
     def __init__(
@@ -29,6 +30,7 @@ class AutoTuner:
         config_path: str,
         result_dir: Optional[str] = None,
         dataset_id: Optional[str] = None,
+        cache_dir: Optional[str] = None,
         hf_token: Optional[str] = None,
     ):
         self.config_path = config_path
@@ -52,6 +54,7 @@ class AutoTuner:
 
         self.dataset_id = dataset_id
         self.hf_token = hf_token or HF_TOKEN
+        self.cache_dir = cache_dir
 
         self.best_throughput = {
             "run_index": None,
@@ -123,7 +126,11 @@ class AutoTuner:
             container = self.docker_client.containers.run(
                 image=engine_config["image"],
                 command=" ".join([str(a) for a in engine_args]),
-                environment={"HF_TOKEN": self.hf_token},
+                environment={
+                    "HF_TOKEN": self.hf_token, 
+                    "HF_HUB_CACHE": "/data/" # dir inside container where model cache is mounted.
+                    },
+                volumes={self.cache_dir: {"bind": "/data/", "mode": "rw"}},
                 ports={f"{port}/tcp": port},
                 detach=True,
                 name=container_name,
