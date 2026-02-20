@@ -1,7 +1,9 @@
 import json
 import logging
 import os
+import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from datetime import datetime
@@ -13,21 +15,52 @@ import coloredlogs
 import docker
 import requests
 import yaml
+from huggingface_hub import HfApi
 
 coloredlogs.install()
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 BENCHMARK_TOOL_CMD = "inference-benchmarker"
 
+hf_api = HfApi()
 
 class AutoTuner:
-    def __init__(self, config_path: str, result_dir: str):
+    def __init__(
+        self,
+        config_path: str,
+        result_dir: Optional[str] = None,
+        dataset_id: Optional[str] = None,
+        cache_dir: Optional[str] = None,
+        hf_token: Optional[str] = None,
+    ):
         self.config_path = config_path
         self.config = self._load_config()
+
+        if not result_dir:
+            temp_dir = tempfile.TemporaryDirectory()
+            self.root_dir = Path(temp_dir.name)
+        else:
+            self.root_dir = Path(result_dir)
+
+        # Create folder structure for results
+        self.results_dir = self.root_dir.joinpath(
+            self.config["model"].replace("/", "--"),
+            self.config["instance_info"]["gpu_type"],
+            self.config["scenario"]["name"],
+            "auto-tune",
+        )
+
+        self.results_dir.mkdir(parents=True, exist_ok=True)
+
+        self.dataset_id = dataset_id
+        self.hf_token = hf_token or HF_TOKEN
+        self.cache_dir = cache_dir
+
+        self.best_throughput = {
+            "run_index": None,
+            "throughput": 0,
+        }
         self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-        self.results_dir = Path(result_dir)
-        self.results_dir.mkdir(exist_ok=True)
-        self.best_throughput = 0
 
         # Set up logging
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -87,18 +120,22 @@ class AutoTuner:
             container_name = f"autotune_engine_{int(time.time())}"
             self.logger.info(f"Starting engine container: {container_name}")
 
-            devices = engine_config['devices']
+            devices = engine_config["devices"]
             device_requests = [docker.types.DeviceRequest(device_ids=devices, capabilities=[["gpu"]])]
 
             container = self.docker_client.containers.run(
                 image=engine_config["image"],
                 command=" ".join([str(a) for a in engine_args]),
-                environment={"HF_TOKEN": HF_TOKEN},
+                environment={
+                    "HF_TOKEN": self.hf_token, 
+                    "HF_HUB_CACHE": "/data/" # dir inside container where model cache is mounted.
+                    },
+                volumes={self.cache_dir: {"bind": "/data/", "mode": "rw"}},
                 ports={f"{port}/tcp": port},
                 detach=True,
                 name=container_name,
                 device_requests=device_requests,
-                stop_signal="SIGTERM"
+                stop_signal="SIGTERM",
             )
 
             return container
@@ -521,7 +558,7 @@ class AutoTuner:
                     tp_dp_comb = combination["value_args"].pop("tp-dp-combinations")
                     combination["value_args"]["tensor_parallel_size"] = tp_dp_comb["tp"]
                     combination["value_args"]["data_parallel_size"] = tp_dp_comb["dp"]
-            
+
                 combinations.append(combination)
 
         self.logger.info(
@@ -539,17 +576,21 @@ class AutoTuner:
 
         # TODO: extend to support multiple engine auto-tuning.
         engine_name = self.config["engine"]["name"]
-        run_id = uuid.uuid4().hex[:4]
-        engine_path = self.results_dir.joinpath(engine_name, f"run_{run_id}_{self.timestamp}")
+        autotune_id = uuid.uuid4().hex[:4]
+        engine_path = self.results_dir.joinpath(engine_name, f"run_{self.timestamp}_{autotune_id}")
         engine_path.mkdir(parents=True, exist_ok=True)
 
         param_combinations = self._generate_parameter_combinations()
+
+        # Copy config file to results folder
+        shutil.copy2(self.config_path, engine_path / "auto_tune_config.yaml")
 
         all_results = []
         for i, param_config in enumerate(param_combinations, 1):
             self.logger.info(f"{'=' * 60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
 
+            # TODO: add model_name metadata to the run_id.
             run_id = uuid.uuid4().hex[:4]
 
             # TODO: if throughput is a goodput criteria, only perform throughput benchmark.
@@ -582,7 +623,7 @@ class AutoTuner:
                 if not meets:
                     # if 90% of throughput is less than best found so far, skip rate finding.
                     # rate finding starts at 90% of throughput.
-                    if (metrics["throughput"] * 0.90) <= self.best_throughput:
+                    if (metrics["throughput"] * 0.90) <= self.best_throughput["throughput"]:
                         self.logger.info(
                             "Goodput criteria not met, but throughput is worse than best found so far. Skipping rate finding..."
                         )
@@ -617,12 +658,18 @@ class AutoTuner:
                     "goodput_checks": goodput_checks,
                     "is_best": False,
                 }
-                if metrics["throughput"] > self.best_throughput:
-                    self.best_throughput = metrics["throughput"]
-                    self.logger.info(f"NEW BEST CONFIG! Throughput: {self.best_throughput:.2f} req/s")
+                if metrics["throughput"] > self.best_throughput["throughput"]:
+                    last_best = self.best_throughput["run_index"]
+                    self.best_throughput = {
+                        "throughput": metrics["throughput"],
+                        "run_index": len(all_results),
+                    }
+                    self.logger.info(
+                        f"NEW BEST CONFIG! Throughput: {self.best_throughput['throughput']:.2f} req/s"
+                    )
                     result["is_best"] = True
-                    if all_results:
-                        all_results[-1]["is_best"] = False
+                    if all_results and last_best is not None:
+                        all_results[last_best]["is_best"] = False
 
                 all_results.append(result)
             except Exception as e:
@@ -649,6 +696,17 @@ class AutoTuner:
                 },
                 f,
                 indent=2,
+            )
+
+        # Upload folder to Huggingface dataset if dataset_id is provided
+        if self.dataset_id:
+            self.logger.info(f"Uploading results to Huggingface dataset {self.dataset_id}...\n")
+            hf_api.upload_folder(
+                folder_path=self.results_dir,
+                path_in_repo=str(self.results_dir.relative_to(self.root_dir)),
+                repo_id=self.dataset_id,
+                token=self.hf_token,
+                repo_type="dataset",
             )
 
         # Print summary
