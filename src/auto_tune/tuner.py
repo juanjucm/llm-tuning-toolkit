@@ -24,6 +24,7 @@ BENCHMARK_TOOL_CMD = "inference-benchmarker"
 
 hf_api = HfApi()
 
+
 class AutoTuner:
     def __init__(
         self,
@@ -49,6 +50,8 @@ class AutoTuner:
             self.config["scenario"]["name"],
             "auto-tune",
         )
+
+        self.tokenizer_path = self.config.get("tokenizer_path", self.config["model"])
 
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -127,9 +130,9 @@ class AutoTuner:
                 image=engine_config["image"],
                 command=" ".join([str(a) for a in engine_args]),
                 environment={
-                    "HF_TOKEN": self.hf_token, 
-                    "HF_HUB_CACHE": "/data/" # dir inside container where model cache is mounted.
-                    },
+                    "HF_TOKEN": self.hf_token,
+                    "HF_HUB_CACHE": "/data/",  # dir inside container where model cache is mounted.
+                },
                 volumes={self.cache_dir: {"bind": "/data/", "mode": "rw"}},
                 ports={f"{port}/tcp": port},
                 detach=True,
@@ -328,8 +331,10 @@ class AutoTuner:
             str(scenario["max_vus"]),
             "--duration",
             scenario["throughput_duration"],
-            "--tokenizer-name",
+            "--model-name",
             self.config["model"],
+            "--tokenizer-name",
+            self.tokenizer_path,
             "--output-path",
             output_file,
             "--run-id",
@@ -405,8 +410,10 @@ class AutoTuner:
             scenario["prompt_options"],
             "--decode-options",
             scenario["decode_options"],
-            "--tokenizer-name",
+            "--model-name",
             self.config["model"],
+            "--tokenizer-name",
+            self.tokenizer_path,
             "--output-path",
             output_file,
             "--run-id",
