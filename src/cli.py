@@ -1,23 +1,22 @@
 import os
-import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
 import typer
 
 from auto_tune.tuner import AutoTuner
+from cli.auto_tune import tuner_app
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
-tuner_app = typer.Typer(
-    name="auto-tune",
-    help="Auto-tune tool for finding serving parameters that maximise defined SLOs.",
+app = typer.Typer(
+    name="llm-tuning-toolkit",
+    help="A toolkit for automatic tuning and benchmarking of LLM serving configurations.",
     no_args_is_help=True,
 )
 
-
-@tuner_app.command()
-def run(
+app.command(name="tune", no_args_is_help=True)
+def auto_tune(
     config: Annotated[str, typer.Option(help="Path to auto-tune configuration file")],
     result_dir: Annotated[str, typer.Option(help="Directory to save tuning results")] = "",
     dataset_id: Annotated[Optional[str], typer.Option(help="Huggingface dataset where to dump results")] = None,
@@ -30,7 +29,7 @@ def run(
         typer.Option(help="Huggingface token for accessing models and datasets."),
     ] = HF_TOKEN,
 ) -> None:
-    """Run the auto-tuning process based on the provided configuration."""
+    """Performs auto-tuning process for the provided configuration."""
     if not os.path.exists(config):
         print(f"Error: Configuration file not found: {config}")
         raise typer.Exit(code=1)

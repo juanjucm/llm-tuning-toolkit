@@ -87,6 +87,7 @@ dependencies = [
 multi-benchmarker = "benchmarker.launch_bench:main"
 dashboard = "dashboard.app:main"
 auto-tune = "auto_tune.cli:main"
+llm-tuning-toolkit = "cli.main:app"
 
 [tool.ruff]
 line-length = 112
