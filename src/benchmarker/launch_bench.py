@@ -287,11 +287,10 @@ def main():
 
                     output_file_name = f"{engine_name}_{run_id}.json"
                     output_file_path = os.path.join(bench_output_dir, output_file_name)
-                    # Remove HF token from envs to report
-                    if "envs" in engine_config.keys():
-                        if "HF_TOKEN" in engine_config["envs"]:
-                            engine_envs_to_report = engine_config["envs"].copy()
-                            del engine_envs_to_report["HF_TOKEN"]
+                    # Strip HF token from envs before reporting
+                    engine_envs_to_report = {
+                        k: v for k, v in engine_config.get("envs", {}).items() if k != "HF_TOKEN"
+                    }
 
                     # Run benchmark
                     run_benchmark(
