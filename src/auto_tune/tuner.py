@@ -111,6 +111,7 @@ class AutoTuner:
         Returns:
             Optional[docker.models.containers.Container]: Docker container instance or None if failed.
         """
+        container_name = None
         try:
             engine_config = self.config["engine"]
             port = self.config["port"]
@@ -140,7 +141,35 @@ class AutoTuner:
 
         except Exception as e:
             self.logger.error(f"Failed to launch engine: {e}")
+            if container_name:
+                try:
+                    container = self.docker_client.containers.get(container_name)
+                    self.logger.warning(
+                        f"Container {container_name} exists after launch error; continuing with status {container.status}."
+                    )
+                    return container
+                except Exception:
+                    pass
             return None
+
+    def _log_container_tail(self, container: docker.models.containers.Container, lines: int = 80):
+        try:
+            logs = container.logs(tail=lines)
+            logs = logs.decode(errors="replace") if isinstance(logs, bytes) else str(logs)
+            if logs.strip():
+                self.logger.error(f"Engine container logs (last {lines} lines):\n{logs.rstrip()}")
+            else:
+                self.logger.warning("Engine container produced no logs.")
+        except Exception as e:
+            self.logger.warning(f"Failed to read engine container logs: {e}")
+
+    def _failed_result(self, run_id: str, param_config: Dict, engine_args: List[str], reason: str) -> Dict:
+        return {
+            "run_id": run_id,
+            "tunable_parameters_config": param_config,
+            "engine_container_command": engine_args,
+            "failure_reason": reason,
+        }
 
     def _wait_for_server_ready(self, container, port: int, timeout: int = 700) -> bool:
         """
@@ -157,8 +186,12 @@ class AutoTuner:
             try:
                 # check if container is still running
                 container.reload()
+                if container.status in ("created", "restarting"):
+                    time.sleep(2)
+                    continue
                 if container.status != "running":
-                    self.logger.error("Engine container has stopped unexpectedly.")
+                    self.logger.error(f"Engine container has stopped unexpectedly with status: {container.status}.")
+                    self._log_container_tail(container)
                     return False
 
                 response = requests.get(f"http://localhost:{port}/health", timeout=5)
@@ -170,6 +203,7 @@ class AutoTuner:
             time.sleep(2)
 
         self.logger.error("Timeout waiting for engine to be ready")
+        self._log_container_tail(container)
         return False
 
     def _cleanup_container(self, container: docker.models.containers.Container):
@@ -590,8 +624,10 @@ class AutoTuner:
         shutil.copy2(self.config_path, engine_path / "auto_tune_config.yaml")
 
         all_results = []
+        failed_results = []
         for i, param_config in enumerate(param_combinations, 1):
             container = None
+            engine_args = []
             self.logger.info(f"{'=' * 60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
 
@@ -603,10 +639,12 @@ class AutoTuner:
                 engine_args = self._build_engine_args(param_config)
                 container = self._launch_docker_engine(engine_args)
                 if not container:
+                    failed_results.append(self._failed_result(run_id, param_config, engine_args, "launch_failed"))
                     continue
 
                 if not self._wait_for_server_ready(container, self.config["port"]):
                     self.logger.error("Server failed to start properly")
+                    failed_results.append(self._failed_result(run_id, param_config, engine_args, "server_not_ready"))
                     continue
 
                 metrics = self._run_throughput_benchmark(
@@ -616,6 +654,9 @@ class AutoTuner:
                 )
                 if not metrics:
                     self.logger.error("Failed to run throughput benchmark, continuing to next config...")
+                    failed_results.append(
+                        self._failed_result(run_id, param_config, engine_args, "throughput_benchmark_failed")
+                    )
                     continue
 
                 self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
@@ -647,6 +688,9 @@ class AutoTuner:
                             "Goodput criteria not met. No optimal rate found for this configuration. Continuing..."
                         )
                         self.logger.info(f"{'=' * 60}")
+                        failed_results.append(
+                            self._failed_result(run_id, param_config, engine_args, "goodput_not_met")
+                        )
                         continue
 
                 self.logger.info(
@@ -678,6 +722,7 @@ class AutoTuner:
                 all_results.append(result)
             except Exception as e:
                 self.logger.error(f"Error testing parameter config {param_config}: {e}")
+                failed_results.append(self._failed_result(run_id, param_config, engine_args, str(e)))
                 import traceback
 
                 traceback.print_exc()
@@ -695,6 +740,7 @@ class AutoTuner:
             "goodput_criteria": self.config["scenario"].get("goodput_criteria", {}),
             "scenario": self.config["scenario"],
             "all_results": all_results,
+            "failed_results": failed_results,
         }
         with open(results_file, "w") as f:
             json.dump(summary, f, indent=2)
@@ -714,5 +760,10 @@ class AutoTuner:
         self.logger.info(f"{'=' * 60}")
         self.logger.info("AUTO-TUNE COMPLETE")
         self.logger.info(f"Tested {len(param_combinations)} parameter combinations.")
+        self.logger.info(f"Succeeded: {len(all_results)}, Failed: {len(failed_results)}")
+        if self.best_throughput["run_index"] is not None:
+            best = all_results[self.best_throughput["run_index"]]
+            self.logger.info(f"Best throughput: {best['metrics']['throughput']:.2f} req/s")
+            self.logger.info(f"Best config: {best['tunable_parameters_config']}")
         self.logger.info(f"Results saved to: {results_file}")
         return summary

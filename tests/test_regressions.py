@@ -93,6 +93,19 @@ def test_run_benchmark_reports_failure():
         bench.subprocess.run = original_run
 
 
+def test_failed_autotune_attempt_is_serializable():
+    install_stubs()
+    tuner = make_tuner({"engine": {"name": "vllm"}, "scenario": {}})
+    failed = tuner._failed_result(
+        "run",
+        {"value_args": {"max-num-seqs": 256}, "action_args": {}},
+        ["--max-num-seqs", "256"],
+        "server_not_ready",
+    )
+    assert failed["failure_reason"] == "server_not_ready"
+    assert failed["engine_container_command"] == ["--max-num-seqs", "256"]
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_"):
