@@ -27,7 +27,8 @@ htmlcov/
 Thumbs.db
 
 # files
-.parquet
+*.parquet
 
 # auto-tune results forlder
 auto_tune_results
+.tokensave

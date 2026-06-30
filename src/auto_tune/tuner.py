@@ -32,6 +32,7 @@ class AutoTuner:
         dataset_id: Optional[str] = None,
         cache_dir: Optional[str] = None,
         hf_token: Optional[str] = None,
+        verbose: bool = False,
     ):
         self.config_path = config_path
         self.config = self._load_config()
@@ -58,8 +59,9 @@ class AutoTuner:
         }
         self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
 
-        # Set up logging
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        # Set up logging. Verbose -> DEBUG (includes benchmark subprocess output).
+        log_level = logging.DEBUG if verbose else logging.INFO
+        coloredlogs.install(level=log_level, fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         self.logger = logging.getLogger(__name__)
 
         # Docker client
@@ -214,11 +216,10 @@ class AutoTuner:
             self.logger.info(f"Running benchmark: {' '.join(cmd)}")
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=None, check=True)
 
-            # self.logger.info("=== SUBPROCESS OUTPUT ===")
-            # self.logger.info(f"Return code: {proc.returncode}")
-            # self.logger.info(f"STDOUT:\n{proc.stdout}")
-            # if proc.stderr:
-            #     self.logger.info(f"STDERR:\n{proc.stderr}")
+            self.logger.debug(f"Return code: {proc.returncode}")
+            self.logger.debug(f"STDOUT:\n{proc.stdout}")
+            if proc.stderr:
+                self.logger.debug(f"STDERR:\n{proc.stderr}")
             self.logger.info("Benchmark completed successfully")
 
         except subprocess.CalledProcessError as e:
@@ -575,7 +576,6 @@ class AutoTuner:
         """
         Run the auto-tuning process.
         """
-        # TODO: implement verbose/normal logging levels.
         self.logger.info(f"Starting auto-tune process...")
 
         # TODO: extend to support multiple engine auto-tuning.
@@ -595,8 +595,7 @@ class AutoTuner:
             self.logger.info(f"{'=' * 60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
 
-            # TODO: add model_name metadata to the run_id.
-            run_id = uuid.uuid4().hex[:4]
+            run_id = f"{self.config['model'].replace('/', '--')}_{uuid.uuid4().hex[:4]}"
 
             # TODO: if throughput is a goodput criteria, only perform throughput benchmark.
             # It makes no sense to do rate finding (decrease rate) if rate is a requirement and is not met by throughput bench.

@@ -17,7 +17,10 @@ parser.add_argument(
     help="Cache directory for Huggingface models and datasets.",
 )
 parser.add_argument(
-    "--hf-token", default=HF_TOKEN, help="Huggingface token to use for accesing models and dataset."
+    "--hf-token", default=HF_TOKEN, help="Huggingface token to use for accessing models and dataset."
+)
+parser.add_argument(
+    "--verbose", action="store_true", help="Enable verbose (DEBUG) logging, including benchmark subprocess output."
 )
 
 
@@ -28,5 +31,5 @@ def main() -> None:
         print(f"Error: Configuration file not found: {args.config}")
         sys.exit(1)
 
-    tuner = AutoTuner(args.config, args.result_dir, args.dataset_id, args.cache_dir, args.hf_token)
+    tuner = AutoTuner(args.config, args.result_dir, args.dataset_id, args.cache_dir, args.hf_token, args.verbose)
     tuner.run_auto_tune()
