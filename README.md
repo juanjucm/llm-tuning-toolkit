@@ -96,6 +96,7 @@ options:
 ## Dashboard Usage
 
 This tool launches a dashboard for visualizing benchmarking results.
+Provide either a results directory or a Parquet datasource.
 
 ```console
 Usage: dashboard [OPTIONS]
