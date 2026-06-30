@@ -3,7 +3,6 @@ import logging
 import os
 import shutil
 import subprocess
-import tempfile
 import time
 import uuid
 from datetime import datetime
@@ -24,6 +23,7 @@ BENCHMARK_TOOL_CMD = "inference-benchmarker"
 
 hf_api = HfApi()
 
+
 class AutoTuner:
     def __init__(
         self,
@@ -36,11 +36,7 @@ class AutoTuner:
         self.config_path = config_path
         self.config = self._load_config()
 
-        if not result_dir:
-            temp_dir = tempfile.TemporaryDirectory()
-            self.root_dir = Path(temp_dir.name)
-        else:
-            self.root_dir = Path(result_dir)
+        self.root_dir = Path(result_dir or "auto_tune_results")
 
         # Create folder structure for results
         self.results_dir = self.root_dir.joinpath(
@@ -76,7 +72,7 @@ class AutoTuner:
         with open(self.config_path, "r") as f:
             config = yaml.safe_load(f)
 
-        required_keys = ["scenario", "engine"]
+        required_keys = ["model", "port", "instance_info", "scenario", "engine"]
         for key in required_keys:
             if key not in config:
                 raise ValueError(f"Missing required config key: {key}")
@@ -117,7 +113,7 @@ class AutoTuner:
             engine_config = self.config["engine"]
             port = self.config["port"]
 
-            container_name = f"autotune_engine_{int(time.time())}"
+            container_name = f"autotune_engine_{uuid.uuid4().hex[:4]}"
             self.logger.info(f"Starting engine container: {container_name}")
 
             devices = engine_config["devices"]
@@ -127,9 +123,9 @@ class AutoTuner:
                 image=engine_config["image"],
                 command=" ".join([str(a) for a in engine_args]),
                 environment={
-                    "HF_TOKEN": self.hf_token, 
-                    "HF_HUB_CACHE": "/data/" # dir inside container where model cache is mounted.
-                    },
+                    "HF_TOKEN": self.hf_token,
+                    "HF_HUB_CACHE": "/data/",  # dir inside container where model cache is mounted.
+                },
                 volumes={self.cache_dir: {"bind": "/data/", "mode": "rw"}},
                 ports={f"{port}/tcp": port},
                 detach=True,
@@ -451,23 +447,26 @@ class AutoTuner:
         Returns:
             Tuple[List[Dict], bool]: List of threshold checks and overall meets status.
         """
-        thresholds = self.config["scenario"]["goodput_criteria"]
+        thresholds = self.config["scenario"].get("goodput_criteria", {})
 
-        # for each metric in metrics, check if a threshold exists and check if reached
         results = []
-        for metric_name, metric_value in metrics.items():
-            for threshold_name, threshold_value in thresholds.items():
-                if metric_name in threshold_name:
-                    if ("max" in threshold_name and metric_value > threshold_value) or (
-                        "min" in threshold_name and metric_value < threshold_value
-                    ):
-                        results.append(
-                            {threshold_name: threshold_value, metric_name: metric_value, "meets": False}
-                        )
-                    else:
-                        results.append(
-                            {threshold_name: threshold_value, metric_name: metric_value, "meets": True}
-                        )
+        for threshold_name, threshold_value in thresholds.items():
+            if threshold_name.startswith("max_"):
+                metric_name = threshold_name[4:]
+                if metric_name not in metrics:
+                    raise ValueError(f"Unknown goodput criterion: {threshold_name}")
+                metric_value = metrics[metric_name]
+                meets = metric_value <= threshold_value
+            elif threshold_name.startswith("min_"):
+                metric_name = threshold_name[4:]
+                if metric_name not in metrics:
+                    raise ValueError(f"Unknown goodput criterion: {threshold_name}")
+                metric_value = metrics[metric_name]
+                meets = metric_value >= threshold_value
+            else:
+                raise ValueError(f"Unknown goodput criterion: {threshold_name}")
+
+            results.append({threshold_name: threshold_value, metric_name: metric_value, "meets": meets})
 
         meets = all(r["meets"] for r in results)
 
@@ -496,6 +495,11 @@ class AutoTuner:
             metrics = self._run_rate_benchmark(
                 rate=rate, run_id=run_id, output_folder=output_folder, engine_config=engine_config
             )
+            if not metrics:
+                self.logger.error("Rate benchmark failed, trying a lower rate...")
+                rate *= 1 - self.config["scenario"]["rate_decrease_factor"]
+                attempts += 1
+                continue
 
             self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
 
@@ -526,7 +530,7 @@ class AutoTuner:
         # Get parameter names and values for each type
         if not value_args_pool and not action_args_pool:
             self.logger.warning("No tunable parameters defined in config, only base args will be used.")
-            return []
+            return [{"value_args": {}, "action_args": {}}]
 
         value_param_names = []
         value_param_values = []
@@ -587,6 +591,7 @@ class AutoTuner:
 
         all_results = []
         for i, param_config in enumerate(param_combinations, 1):
+            container = None
             self.logger.info(f"{'=' * 60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
 
@@ -683,20 +688,17 @@ class AutoTuner:
 
         # Save all results
         results_file = engine_path / "auto_tune_results.json"
+        summary = {
+            "timestamp": self.timestamp,
+            "config_file": self.config_path,
+            "engine_name": engine_name,
+            "instance_info": self.config.get("instance_info", {}),
+            "goodput_criteria": self.config["scenario"].get("goodput_criteria", {}),
+            "scenario": self.config["scenario"],
+            "all_results": all_results,
+        }
         with open(results_file, "w") as f:
-            json.dump(
-                {
-                    "timestamp": self.timestamp,
-                    "config_file": self.config_path,
-                    "engine_name": engine_name,
-                    "instance_info": self.config.get("instance_info", {}),
-                    "goodput_criteria": self.config["scenario"]["goodput_criteria"],
-                    "scenario": self.config["scenario"],
-                    "all_results": all_results,
-                },
-                f,
-                indent=2,
-            )
+            json.dump(summary, f, indent=2)
 
         # Upload folder to Huggingface dataset if dataset_id is provided
         if self.dataset_id:
@@ -714,3 +716,4 @@ class AutoTuner:
         self.logger.info("AUTO-TUNE COMPLETE")
         self.logger.info(f"Tested {len(param_combinations)} parameter combinations.")
         self.logger.info(f"Results saved to: {results_file}")
+        return summary

@@ -1,6 +1,6 @@
 import argparse
 import json
-import os
+from pathlib import Path
 
 import pandas as pd
 
@@ -8,9 +8,11 @@ import pandas as pd
 def build_df(model: str, data_files: dict[str, str]) -> pd.DataFrame:
     df = pd.DataFrame()
     # Load the results
-    for key, filename in data_files.items():
+    for filename in data_files.values():
         with open(filename, "r") as f:
             data = json.load(f)
+            if "config" not in data or "results" not in data:
+                continue
             if data["config"]["meta"] is None:
                 data["config"]["meta"] = {}
             for result in data["results"]:
@@ -36,23 +38,15 @@ def build_df(model: str, data_files: dict[str, str]) -> pd.DataFrame:
 
 
 def build_results_df(results_dir) -> pd.DataFrame:
-    df = pd.DataFrame()
-    # list directories
-    directories = [
-        f"{results_dir}/{d}" for d in os.listdir(results_dir) if os.path.isdir(f"{results_dir}/{d}")
-    ] + [results_dir]
-    for directory in directories:
-        # list json files in results directory
-        data_files = {}
-        for filename in os.listdir(directory):
-            if filename.endswith(".json"):
-                data_files[filename.split(".")[-2]] = f"{directory}/{filename}"
-        df = pd.concat([df, build_df(directory.split("/")[-1], data_files)])
-    return df
+    root = Path(results_dir)
+    data_files = {path.as_posix(): path.as_posix() for path in root.rglob("*.json")}
+    return build_df(root.name, data_files)
 
 
 def build_results(results_dir, results_file, device):
     df = build_results_df(results_dir)
+    if df.empty:
+        raise ValueError(f"No inference-benchmarker JSON results found in {results_dir}")
     if "device" not in df.columns:
         df["device"] = df["model"].apply(lambda x: device)
     df["error_rate"] = df["failed_requests"] / (df["failed_requests"] + df["successful_requests"]) * 100.0

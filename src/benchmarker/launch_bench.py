@@ -1,5 +1,4 @@
 import argparse
-import json
 import logging
 import os
 import subprocess
@@ -52,11 +51,9 @@ def parse_arguments() -> argparse.Namespace:
         help='Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)',
         default="all",
     )
-    parser.add_argument(
-        "--output-path", type=str, help="Directory to save benchmark results", default="./results"
-    )
+    parser.add_argument("--output-path", type=str, help="Directory to save benchmark results", default="./results")
     parser.add_argument("--show-logs", action="store_true", help="Show engine container logs.")
-    
+
     # TODO: add hf dataset and token args.
 
     return parser.parse_args()
@@ -66,7 +63,7 @@ def get_engine_config_dict(engine: Dict) -> Dict:
     config = {}
     config["image"] = engine.get("image")
     config["name"] = engine.get("name", config["image"])
-    config["args"] = engine.get("args")
+    config["args"] = engine.get("args", [])
     config["cmd"] = " ".join([str(a) for a in config["args"]])
     environment = {}
     envs = engine.get("envs")
@@ -77,7 +74,7 @@ def get_engine_config_dict(engine: Dict) -> Dict:
                 environment[key] = value
 
     config["envs"] = environment
-    
+
     # Add HF_TOKEN to envs if available
     if HF_TOKEN:
         config["envs"]["HF_TOKEN"] = HF_TOKEN
@@ -91,10 +88,10 @@ def launch_docker_engine(
     engine_name: str, engine_config: Dict[str, Any], port: int, logger: logging.Logger
 ) -> Container:
     try:
-        container_name = f"bench_{engine_name.lower()}"
+        container_name = f"bench_{engine_name.lower()}_{uuid.uuid4().hex[:4]}"
         logger.info(f"Starting {engine_name} container: {container_name}")
 
-        devices = engine_config['devices']
+        devices = engine_config["devices"]
         device_requests = [docker.types.DeviceRequest(device_ids=devices, capabilities=[["gpu"]])]
 
         client = docker.from_env()
@@ -143,11 +140,11 @@ def run_benchmark(
     bench_args: List,
     engine_name: str,
     engine_args: str,
-    engine_envs: str,
+    engine_envs: Dict[str, str],
     run_id: str,
     output_path: str,
     logger: logging.Logger,
-):
+) -> bool:
     try:
         cmd = [BENCHMARK_TOOL_CMD]
         cmd.extend(["--no-console"])  # disable UI so the process doesn't get stuck when finished.
@@ -165,11 +162,18 @@ def run_benchmark(
 
         logger.info(f"Benchmark completed for {engine_name} - {scenario_name}")
         logger.info(proc.stdout)
+        return True
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Benchmark failed for {engine_name} - {scenario_name} with return code {e.returncode}")
+        logger.error(f"STDOUT:\n{e.stdout if e.stdout else 'None'}")
+        logger.error(f"STDERR:\n{e.stderr if e.stderr else 'None'}")
+        return False
     except Exception as e:
         logger.error(f"Error running benchmark for {engine_name} - {scenario_name}: {e}")
         import traceback
 
         logger.error(traceback.format_exc())
+        return False
 
 
 def cleanup_container(container: Container, logger: logging.Logger):
@@ -218,10 +222,11 @@ def main():
         # Filter scenarios
         scenarios_to_run = []
         requested_scenarios = args.scenarios.split(",")
+        scenarios = config.get("scenarios", [])
         if requested_scenarios == ["all"]:
-            scenarios_to_run = config["scenarios"]
+            scenarios_to_run = scenarios
         else:
-            for s in config["scenarios"]:
+            for s in scenarios:
                 if s["name"] in requested_scenarios:
                     scenarios_to_run.append(s)
 
@@ -245,34 +250,36 @@ def main():
 
             # Filter engines
             engines_to_test = []
+            scenario_engines = scenario.get("engines", [])
             if requested_engines == ["all"]:
-                engines_to_test = scenario["engines"]
+                engines_to_test = scenario_engines
             else:
-                for e in scenario["engines"]:
-                    if e["name"] in requested_engines:
+                for e in scenario_engines:
+                    if e.get("name") in requested_engines:
                         engines_to_test.append(e)
 
             if engines_to_test:
                 logger.info(f"Running engines: {[e['name'] for e in engines_to_test]}")
             else:
                 logger.error(
-                    f"Requested engine/s are not defined for scenario {scenario['name']}. Defined engines for scenario {scenario['name']}: {[e['name'] for e in scenario['engines']]}"
+                    f"Requested engine/s are not defined for scenario {scenario_name}. Defined engines for scenario {scenario_name}: {[e.get('name') for e in scenario_engines]}"
                 )
-            
+
             # Define scenario output directory
             scenario_output_dir = os.path.join(args.output_path, scenario_name)
 
             for engine in engines_to_test:
                 run_id = generate_unique_run_id()
                 total_runs += 1
+                container = None
+                logs_thread = None
+                engine_name = engine.get("name", "<unknown>")
                 try:
-                    engine_name = engine["name"]
                     engine_config = get_engine_config_dict(engine)
                     container = launch_docker_engine(
                         engine_name=engine_name, engine_config=engine_config, port=port, logger=logger
                     )
 
-                    logs_thread = None
                     if args.show_logs:
                         logs_thread = stream_container_logs(container.name)
 
@@ -287,14 +294,11 @@ def main():
 
                     output_file_name = f"{engine_name}_{run_id}.json"
                     output_file_path = os.path.join(bench_output_dir, output_file_name)
-                    # Remove HF token from envs to report
-                    if "envs" in engine_config.keys():
-                        if "HF_TOKEN" in engine_config["envs"]:
-                            engine_envs_to_report = engine_config["envs"].copy()
-                            del engine_envs_to_report["HF_TOKEN"]
+                    engine_envs_to_report = engine_config.get("envs", {}).copy()
+                    engine_envs_to_report.pop("HF_TOKEN", None)
 
                     # Run benchmark
-                    run_benchmark(
+                    if run_benchmark(
                         scenario_name=scenario_name,
                         scenario_description=scenario_description,
                         instance_info="",  # json.dumps(instance_info),
@@ -305,14 +309,14 @@ def main():
                         run_id=run_id,
                         output_path=output_file_path,
                         logger=logger,
-                    )
+                    ):
+                        successful_runs += 1
                 except Exception as e:
                     logger.error(f"Error testing '{engine_name}' in '{scenario_name}': {e}")
 
                 finally:
                     # Clean up container
                     if container:
-                        successful_runs += 1
                         cleanup_container(container, logger)
                         if logs_thread:
                             logs_thread.join()
