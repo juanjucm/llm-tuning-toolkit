@@ -8,11 +8,16 @@ Toolkit for automatic tuning and benchmarking of LLM serving configurations.
 
 ## Prerequisites
 
-This project requires `inference-benchmarker`. Install it using:
+The default benchmark backend is `inference-benchmarker`. Install it with:
 
 ```bash
 cargo install --git https://github.com/juanjucm/inference-benchmarker/
 ```
+
+The benchmark executor is pluggable. `vllm-bench` can be selected with
+`--benchmark-backend vllm-bench`, or a custom command can be passed with
+`--benchmark-command`. Auto-tune metric extraction currently supports
+`inference-benchmarker` result JSON.
 
 ## Installation
 
@@ -27,44 +32,65 @@ Install dependencies with -e for dev mode:
 ```bash
 uv pip install -e .
 ```
+
+## Configs
+
+Reusable configs live under `configs/`.
+
+```text
+configs/
+  benchmarks/<model>/<instance>/bench_config.yaml
+  auto-tune/<model>/<instance>/<scenario>.yaml
+```
+
+Generated result folders and Parquet files are local outputs and ignored by git. Auto-tune still copies the config used for a run into its result folder for reproducibility.
+
 ## Auto Tuning Usage
 
-This module provides a way to automatically detect the best LLM serving configuration that maximises throughput while being complient with a set of defined goodput criteria.
+This module automatically detects the best LLM serving configuration that maximizes throughput while staying compliant with a set of defined goodput criteria.
 
-For running the script, make sure to provide a valid config yaml. Take a loot at `auto-tune-config.yaml` to check the format and expected parameters.
+For running the script, make sure to provide a valid config yaml. Take a look at `configs/auto-tune/.../<scenario>.yaml` to check the format and expected parameters.
 
 ```console
-usage: uv run auto-tune [-h] [--config <config.yaml>] [--result-dir <result_dir>] [--dataset-id <dataset_id>] [--hf-token <hf_token>]
+usage: uv run auto-tune --config <config.yaml> [--result-dir <result_dir>] [--dataset-id <dataset_id>] [--cache-dir <cache_dir>] [--hf-token <hf_token>] [--benchmark-backend <backend>] [--benchmark-command <cmd>] [--verbose]
 
-Auto-tune tool for finding optimal engine parameters.
+Tune serving-engine parameters by running benchmark backends.
 
 options:
-  -h, --help    show this help message and exit
-  --config      Path to auto-tune configuration file
-  --result-dir (optional) Directory to save tuning results
-  --dataset-id (optional) Huggingface dataset where to dump results
-  --hf-token   (optional) Huggingface token to use for accesing models and dataset.
+  -h, --help              show this help message and exit
+  --config                Path to auto-tune YAML configuration
+  --result-dir            Directory to save tuning results
+  --dataset-id            Hugging Face dataset where results should be uploaded
+  --cache-dir             Cache directory for Hugging Face models and datasets
+  --hf-token              Hugging Face token for model and dataset access
+  --benchmark-backend     Benchmark executor backend: inference-benchmarker or vllm-bench
+  --benchmark-command     Override benchmark command, e.g. "python -m my_bench"
+  --verbose               Enable DEBUG logging
 ```
 
 ## Multi Benchmarking Usage
 
-This tool allows for easily define and launch benchmarking scenarios for a set of defined LLM runtimes with specified parameters.
+This tool defines and launches benchmark scenarios for a set of LLM runtimes with specified parameters.
 
-For running the script, make sure to provide a valid config yaml. Take a loot at `bench_config.yaml` to check the format and expected parameters.
+For running the script, make sure to provide a valid config yaml. Take a look at `configs/benchmarks/.../bench_config.yaml` to check the format and expected parameters.
 
 ```console
-usage: uv run multi-benchmarker [-h] [--config CONFIG] [--scenarios SCENARIOS] [--engines ENGINES] [--show-logs] [--save-dir SAVE_DIR]
+usage: uv run multi-benchmarker [-h] --config CONFIG [--scenarios SCENARIOS] [--engines ENGINES] [--output-path OUTPUT_PATH] [--benchmark-backend BACKEND] [--benchmark-command CMD] [--cache-dir CACHE_DIR] [--hf-token HF_TOKEN] [--show-logs] [--verbose]
 
-Launch benchmarks based on a configuration file
+Run configured serving-engine benchmarks with a selectable benchmark backend.
 
 options:
-  -h, --help            show this help message and exit
-  --config CONFIG       Path to benchmark configuration file
-  --scenarios SCENARIOS
-                        Specific scenarios to run, comma separated (i.e: "s1,s2,s3") (if not specified, runs all scenarios)
-  --engines ENGINES     Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)
-  --save-dir SAVE_DIR   Directory to save benchmark results
-  --show-logs           Show engine container logs.
+  -h, --help                 show this help message and exit
+  --config CONFIG            Path to benchmark YAML config
+  --scenarios SCENARIOS      Specific scenarios to run, comma separated
+  --engines ENGINES          Specific engines to test, comma separated
+  --output-path OUTPUT_PATH  Directory to save benchmark results
+  --benchmark-backend        Benchmark executor backend: inference-benchmarker or vllm-bench
+  --benchmark-command        Override benchmark command
+  --cache-dir CACHE_DIR      Cache directory for Hugging Face models and datasets
+  --hf-token HF_TOKEN        Hugging Face token for model access
+  --show-logs                Stream engine container logs while running
+  --verbose                  Enable DEBUG logging
 ```
 
 ## Dashboard Usage

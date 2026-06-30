@@ -21,13 +21,16 @@ venv/
 .pytest_cache/
 .coverage
 htmlcov/
+.tokensave/
 
 # OS
 .DS_Store
 Thumbs.db
 
-# files
-.parquet
+# Generated outputs
+*.parquet
+results/
+benchmarking_results/
 
-# auto-tune results forlder
-auto_tune_results
+# Auto-tune results
+auto_tune_results/

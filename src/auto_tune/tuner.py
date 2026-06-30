@@ -2,27 +2,30 @@ import json
 import logging
 import os
 import shutil
-import subprocess
-import tempfile
-import time
 import uuid
 from datetime import datetime
 from itertools import product
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import coloredlogs
-import docker
-import requests
 import yaml
 from huggingface_hub import HfApi
+
+from benchmarker.engine import DockerEngineRunner
+from benchmarker.engine import cache_mount
+from benchmarker.engine import spec_from_engine_config
+from benchmarker.engine import token_environment
+from benchmarker.executors import BenchmarkExecutionError
+from benchmarker.executors import BenchmarkRequest
+from benchmarker.executors import BenchmarkRun
+from benchmarker.executors import create_benchmark_executor
 
 coloredlogs.install()
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-BENCHMARK_TOOL_CMD = "inference-benchmarker"
-
 hf_api = HfApi()
+
 
 class AutoTuner:
     def __init__(
@@ -32,623 +35,286 @@ class AutoTuner:
         dataset_id: Optional[str] = None,
         cache_dir: Optional[str] = None,
         hf_token: Optional[str] = None,
+        benchmark_backend: str = "inference-benchmarker",
+        benchmark_command: Optional[str] = None,
+        verbose: bool = False,
     ):
         self.config_path = config_path
         self.config = self._load_config()
-
-        if not result_dir:
-            temp_dir = tempfile.TemporaryDirectory()
-            self.root_dir = Path(temp_dir.name)
-        else:
-            self.root_dir = Path(result_dir)
-
-        # Create folder structure for results
+        self.root_dir = Path(result_dir or "auto_tune_results")
         self.results_dir = self.root_dir.joinpath(
             self.config["model"].replace("/", "--"),
             self.config["instance_info"]["gpu_type"],
             self.config["scenario"]["name"],
             "auto-tune",
         )
-
         self.results_dir.mkdir(parents=True, exist_ok=True)
+
+        log_level = logging.DEBUG if verbose else logging.INFO
+        coloredlogs.install(level=log_level, fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        self.logger = logging.getLogger(__name__)
 
         self.dataset_id = dataset_id
         self.hf_token = hf_token or HF_TOKEN
         self.cache_dir = cache_dir
-
-        self.best_throughput = {
-            "run_index": None,
-            "throughput": 0,
-        }
+        self.best_throughput = {"run_index": None, "throughput": 0}
         self.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-
-        # Set up logging
-        logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        self.logger = logging.getLogger(__name__)
-
-        # Docker client
-        self.docker_client = docker.from_env()
+        self.engine_runner = DockerEngineRunner(self.logger)
+        self.benchmark_executor = create_benchmark_executor(
+            benchmark_backend, logger=self.logger, command=benchmark_command, verbose=verbose
+        )
 
     def _load_config(self) -> Dict:
-        """
-        Load and validate configuration from YAML file
-        """
         with open(self.config_path, "r") as f:
             config = yaml.safe_load(f)
 
-        required_keys = ["scenario", "engine"]
-        for key in required_keys:
+        for key in ["model", "port", "instance_info", "scenario", "engine"]:
             if key not in config:
                 raise ValueError(f"Missing required config key: {key}")
-
         return config
 
     def _build_engine_args(self, param_config: Dict) -> List[str]:
-        """
-        Build engine arguments from configuration.
-
-        Args:
-            param_config (Dict): Dictionary with 'value_args' and 'action_args'.
-        Returns:
-            List[str]: List of command-line arguments for the engine.
-        """
         args = list(self.config["engine"]["base_args"])
-
-        # Handle value arguments (--param value)
         for param, value in param_config.get("value_args", {}).items():
             args.extend([f"--{param.replace('_', '-')}", str(value)])
-
-        # Handle action arguments (boolean flags)
         for param, value in param_config.get("action_args", {}).items():
             if value:
                 args.append(f"--{param.replace('_', '-')}")
-
         return args
 
-    def _launch_docker_engine(self, engine_args: List[str]) -> Optional[docker.models.containers.Container]:
-        """
-        Launch a Docker container running the engine.
-        Args:
-            engine_args (List[str]): List of engine arguments.
-        Returns:
-            Optional[docker.models.containers.Container]: Docker container instance or None if failed.
-        """
-        try:
-            engine_config = self.config["engine"]
-            port = self.config["port"]
-
-            container_name = f"autotune_engine_{int(time.time())}"
-            self.logger.info(f"Starting engine container: {container_name}")
-
-            devices = engine_config["devices"]
-            device_requests = [docker.types.DeviceRequest(device_ids=devices, capabilities=[["gpu"]])]
-
-            container = self.docker_client.containers.run(
-                image=engine_config["image"],
-                command=" ".join([str(a) for a in engine_args]),
-                environment={
-                    "HF_TOKEN": self.hf_token, 
-                    "HF_HUB_CACHE": "/data/" # dir inside container where model cache is mounted.
-                    },
-                volumes={self.cache_dir: {"bind": "/data/", "mode": "rw"}},
-                ports={f"{port}/tcp": port},
-                detach=True,
-                name=container_name,
-                device_requests=device_requests,
-                stop_signal="SIGTERM",
-            )
-
-            return container
-
-        except Exception as e:
-            self.logger.error(f"Failed to launch engine: {e}")
-            return None
-
-    def _wait_for_server_ready(self, container, port: int, timeout: int = 700) -> bool:
-        """
-        Wait for the server to be ready to accept requests.
-        Args:
-            port (int): Port number where the server is expected to be listening.
-            timeout (int): Maximum time to wait in seconds.
-        Returns:
-            bool: True if server is ready, False if timeout occurs.
-        """
-        self.logger.info("Waiting for engine to be ready...")
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                # check if container is still running
-                container.reload()
-                if container.status != "running":
-                    self.logger.error("Engine container has stopped unexpectedly.")
-                    return False
-
-                response = requests.get(f"http://localhost:{port}/health", timeout=5)
-                if response.status_code == 200:
-                    self.logger.info("Engine is ready!")
-                    return True
-            except requests.RequestException:
-                pass
-            time.sleep(2)
-
-        self.logger.error("Timeout waiting for engine to be ready")
-        return False
-
-    def _cleanup_container(self, container: docker.models.containers.Container):
-        """
-        Clean up Docker container
-        Args:
-            container (docker.models.containers.Container): Container to clean up.
-        """
-        try:
-            self.logger.info(f"Stopping container...")
-            container.stop(timeout=100)
-        except Exception as e:
-            self.logger.warning(f"Error stopping container, forcing removal.")
-
-        self.logger.info(f"Waiting for container to exit...")
-        try:
-            container.reload()
-        except Exception as e:
-            self.logger.warning(f"Error reloading container status: {e}")
-        while container.status != "exited":
-            time.sleep(1)
-            container.reload()
-            self.logger.info(f"Container status: {container.status}")
-
-        self.logger.info(f"Removing container...")
-        container.remove(force=True)
-
-    def _run_inference_benchmarker(self, bench_args: List[str]):
-        """
-        Run the benchmark command using inference-benchmarker tool
-
-        Args:
-            bench_args (List[str]): List of arguments for the benchmark tool.
-        Raises:
-            subprocess.CalledProcessError: If the benchmark command fails.
-        """
-        try:
-            cmd = [BENCHMARK_TOOL_CMD]
-            cmd.extend(bench_args)
-            cmd.extend(["--no-console"])  # disable UI
-
-            cmd = [str(c) for c in cmd]
-
-            self.logger.info(f"Running benchmark: {' '.join(cmd)}")
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=None, check=True)
-
-            # self.logger.info("=== SUBPROCESS OUTPUT ===")
-            # self.logger.info(f"Return code: {proc.returncode}")
-            # self.logger.info(f"STDOUT:\n{proc.stdout}")
-            # if proc.stderr:
-            #     self.logger.info(f"STDERR:\n{proc.stderr}")
-            self.logger.info("Benchmark completed successfully")
-
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Benchmark failed with return code {e.returncode}: {e}")
-            self.logger.error(f"Command: {' '.join(cmd)}")
-            self.logger.error(f"STDOUT:\n{e.stdout if e.stdout else 'None'}")
-            self.logger.error(f"STDERR:\n{e.stderr if e.stderr else 'None'}")
-
-            # Print full traceback for debugging
-            import traceback
-
-            self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            raise e
-        except Exception as e:
-            self.logger.error(f"Unexpected error running benchmark: {e}")
-            import traceback
-
-            self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            raise e
-
-    def _get_metrics_from_results(self, results_dict: Dict) -> Dict:
-        """
-        Extract key metrics from benchmark results.
-        Results format expected to match inference-benchmarker output. Only one result should be present
-        since AutoTuner executes one-run throughput/rate benchmarks.
-
-        Args:
-            results_dict (Dict): Parsed JSON results from benchmark.
-        Returns:
-            Dict: Extracted metrics including throughput, latencies, success rates, etc.
-        """
-        metrics = {}
-        results = results_dict.get("results", [])
-        result = (
-            results[-1] if results else {}
-        )  # NOTE: following inference-benchmarker output logs format, take last result (skip warmup)
-
-        # Throughput and success metrics
-        metrics["throughput"] = result.get("request_rate", 0)
-        metrics["total_requests"] = result.get("total_requests", 0)
-        metrics["successful_requests"] = result.get("successful_requests", 0)
-        metrics["failed_requests"] = result.get("failed_requests", 0)
-        metrics["success_rate"] = result.get("successful_requests", 0) / max(result.get("total_requests", 1), 1)
-
-        # Latency metrics
-        ttft = result.get("time_to_first_token_ms", {})
-        e2e = result.get("e2e_latency_ms", {})
-        itl = result.get("inter_token_latency_ms", {})
-        metrics.update(
-            {
-                "ttft_p99_ms": ttft.get("p99", float("inf")),
-                "ttft_p95_ms": ttft.get("p95", float("inf")),
-                "ttft_p90_ms": ttft.get("p90", float("inf")),
-                "ttft_p80_ms": ttft.get("p80", float("inf")),
-                "ttft_p70_ms": ttft.get("p70", float("inf")),
-                "ttft_p60_ms": ttft.get("p60", float("inf")),
-                "ttft_p50_ms": ttft.get("p50", float("inf")),
-                "ttft_avg_ms": ttft.get("avg", float("inf")),
-                "e2e_p99_ms": e2e.get("p99", float("inf")),
-                "e2e_p95_ms": e2e.get("p95", float("inf")),
-                "e2e_p90_ms": e2e.get("p90", float("inf")),
-                "e2e_p80_ms": e2e.get("p80", float("inf")),
-                "e2e_p70_ms": e2e.get("p70", float("inf")),
-                "e2e_p60_ms": e2e.get("p60", float("inf")),
-                "e2e_p50_ms": e2e.get("p50", float("inf")),
-                "e2e_avg_ms": e2e.get("avg", float("inf")),
-                "itl_p99_ms": itl.get("p99", float("inf")),
-                "itl_p95_ms": itl.get("p95", float("inf")),
-                "itl_p90_ms": itl.get("p90", float("inf")),
-                "itl_p80_ms": itl.get("p80", float("inf")),
-                "itl_p70_ms": itl.get("p70", float("inf")),
-                "itl_p60_ms": itl.get("p60", float("inf")),
-                "itl_p50_ms": itl.get("p50", float("inf")),
-                "itl_avg_ms": itl.get("avg", float("inf")),
-            }
+    def _engine_spec(self, engine_args: List[str]):
+        engine_config = dict(self.config["engine"])
+        engine_config["args"] = engine_args
+        env = token_environment(self.hf_token, self.cache_dir)
+        return spec_from_engine_config(
+            engine_config,
+            self.config["port"],
+            extra_env=env,
+            volumes=cache_mount(self.cache_dir),
         )
 
-        return metrics
+    def _get_metrics_from_results(self, results_dict: Dict) -> Dict:
+        return self.benchmark_executor.extract_metrics(results_dict)
+
+    def _run_benchmark(self, run: BenchmarkRun) -> bool:
+        try:
+            self.benchmark_executor.run(run)
+            return True
+        except BenchmarkExecutionError as exc:
+            self.logger.error(f"Benchmark failed: {exc}")
+            return False
+
+    def _run_benchmark_request(self, request: BenchmarkRequest) -> bool:
+        try:
+            run = self.benchmark_executor.build_request_run(request)
+        except (NotImplementedError, ValueError) as exc:
+            self.logger.error(f"Benchmark backend cannot run this request: {exc}")
+            return False
+        return self._run_benchmark(run)
 
     def _run_throughput_benchmark(self, run_id: str, output_folder: str, engine_config: str) -> Optional[Dict]:
-        """Run throughput benchmark to discover maximum throughput
-
-        Args:
-            run_id (str): Unique identifier for this benchmark run. Will be used for results file naming.
-            output_folder (str): Directory to save benchmark results.
-            engine_config (str): Current docker engine command.
-        Returns:
-            Optional[Dict]: Parsed benchmark results or None if failed.
-        """
         self.logger.info("Running throughput benchmark...")
-
         scenario = self.config["scenario"]
         port = self.config["port"]
         output_file = os.path.join(output_folder, f"throughput_{run_id}.json")
-
-        # Build benchmark arguments for throughput test
-        bench_args = [
-            "--url",
-            f"http://localhost:{port}",
-            "--benchmark-kind",
-            "throughput",
-            "--max-vus",
-            str(scenario["max_vus"]),
-            "--duration",
-            scenario["throughput_duration"],
-            "--tokenizer-name",
-            self.config["model"],
-            "--output-path",
-            output_file,
-            "--run-id",
-            run_id,
-        ]
-
-        if scenario.get("prompt_options"):
-            bench_args.extend(["--prompt-options", scenario["prompt_options"]])
-        if scenario.get("decode_options"):
-            bench_args.extend(["--decode-options", scenario["decode_options"]])
-
-        if scenario.get("dataset_file"):
-            bench_args.extend(["--dataset-file", scenario["dataset_file"]])
-
-        metadata = (
-            f"autotune=true,engine_name={self.config['engine']['name']},docker_engine_args={engine_config}"
+        request = BenchmarkRequest(
+            kind="throughput",
+            url=f"http://localhost:{port}",
+            max_vus=scenario["max_vus"],
+            duration=scenario["throughput_duration"],
+            tokenizer_name=self.config["model"],
+            output_path=output_file,
+            run_id=run_id,
+            prompt_options=scenario.get("prompt_options"),
+            decode_options=scenario.get("decode_options"),
+            dataset_file=scenario.get("dataset_file"),
+            extra_meta=self._metadata(engine_config),
         )
-        bench_args.extend(["--extra-meta", metadata])
 
-        try:
-            self._run_inference_benchmarker(bench_args)
-        except Exception as e:
-            self.logger.error(f"Throughput benchmark failed: {e}")
+        if not self._run_benchmark_request(request):
             return None
-
-        # return metrics
-        metrics = {}
-        if os.path.exists(output_file):
-            with open(output_file, "r") as f:
-                results = json.load(f)
-                metrics = self._get_metrics_from_results(results)
-                if metrics:
-                    return metrics
-                else:
-                    self.logger.error("Failed to extract metrics from results.")
-                    return None
-        else:
-            self.logger.error("Results file not found after benchmark")
-            return None
+        return self._load_metrics(output_file)
 
     def _run_rate_benchmark(
         self, rate: float, run_id: str, output_folder: str, engine_config: str
     ) -> Optional[Dict]:
-        """
-        Run rate benchmark with specific request rate.
-        Args:
-            rate (float): Request rate in requests per second.
-            run_id (str): Unique identifier for this benchmark run. Will be used for results file
-            output_folder (str): Directory to save benchmark results.
-            engine_config (str): Current docker engine command.
-        Returns:
-            Optional[Dict]: Parsed benchmark results or None if failed.
-        """
         self.logger.info(f"Running rate benchmark at {rate:.2f} req/s")
-
         scenario = self.config["scenario"]
         port = self.config["port"]
         output_file = os.path.join(output_folder, f"rate_@{rate:.2f}_{run_id}.json")
-
-        # Build benchmark arguments for rate test
-        bench_args = [
-            "--url",
-            f"http://localhost:{port}",
-            "--benchmark-kind",
-            "rate",
-            "--max-vus",
-            str(scenario["max_vus"]),
-            "--duration",
-            str(scenario["rate_duration"]),
-            "--rates",
-            str(rate),
-            "--prompt-options",
-            scenario["prompt_options"],
-            "--decode-options",
-            scenario["decode_options"],
-            "--tokenizer-name",
-            self.config["model"],
-            "--output-path",
-            output_file,
-            "--run-id",
-            run_id,
-        ]
-
-        if scenario.get("dataset_file"):
-            bench_args.extend(["--dataset-file", scenario["dataset_file"]])
-
-        metadata = (
-            f"autotune=true,engine_name={self.config['engine']['name']},docker_engine_args={engine_config}"
+        request = BenchmarkRequest(
+            kind="rate",
+            url=f"http://localhost:{port}",
+            max_vus=scenario["max_vus"],
+            duration=str(scenario["rate_duration"]),
+            tokenizer_name=self.config["model"],
+            output_path=output_file,
+            run_id=run_id,
+            prompt_options=scenario.get("prompt_options"),
+            decode_options=scenario.get("decode_options"),
+            dataset_file=scenario.get("dataset_file"),
+            rate=rate,
+            extra_meta=self._metadata(engine_config),
         )
-        bench_args.extend(["--extra-meta", metadata])
 
-        try:
-            self._run_inference_benchmarker(bench_args)
-        except Exception as e:
-            self.logger.error(f"Rate benchmark failed: {e}")
+        if not self._run_benchmark_request(request):
             return None
+        return self._load_metrics(output_file)
 
-        # return metrics
-        metrics = {}
-        if os.path.exists(output_file):
-            with open(output_file, "r") as f:
-                results = json.load(f)
-                metrics = self._get_metrics_from_results(results)
-                if metrics:
-                    return metrics
-                else:
-                    self.logger.error("Failed to extract metrics from results.")
-                    return None
-        else:
+    def _load_metrics(self, output_file: str) -> Optional[Dict]:
+        if not os.path.exists(output_file):
             self.logger.error("Results file not found after benchmark")
             return None
+        with open(output_file, "r") as f:
+            metrics = self._get_metrics_from_results(json.load(f))
+        if not metrics:
+            self.logger.error("Failed to extract metrics from results.")
+            return None
+        return metrics
+
+    def _metadata(self, engine_config: str) -> Dict[str, Any]:
+        return {
+            "autotune": "true",
+            "engine_name": self.config["engine"]["name"],
+            "docker_engine_args": engine_config,
+        }
 
     def _meets_goodput_criteria(self, metrics: Dict) -> Tuple[List[Dict], bool]:
-        """
-        Check if metrics meet goodput thresholds. Returns detailed results and overall boolean.
-
-        Args:
-            metrics (Dict): Metrics to evaluate.
-        Returns:
-            Tuple[List[Dict], bool]: List of threshold checks and overall meets status.
-        """
-        thresholds = self.config["scenario"]["goodput_criteria"]
-
-        # for each metric in metrics, check if a threshold exists and check if reached
+        thresholds = self.config["scenario"].get("goodput_criteria", {})
         results = []
-        for metric_name, metric_value in metrics.items():
-            for threshold_name, threshold_value in thresholds.items():
-                if metric_name in threshold_name:
-                    if ("max" in threshold_name and metric_value > threshold_value) or (
-                        "min" in threshold_name and metric_value < threshold_value
-                    ):
-                        results.append(
-                            {threshold_name: threshold_value, metric_name: metric_value, "meets": False}
-                        )
-                    else:
-                        results.append(
-                            {threshold_name: threshold_value, metric_name: metric_value, "meets": True}
-                        )
-
-        meets = all(r["meets"] for r in results)
-
-        return results, meets
+        for threshold_name, threshold_value in thresholds.items():
+            if threshold_name.startswith("max_"):
+                metric_name = threshold_name[4:]
+                if metric_name not in metrics:
+                    raise ValueError(f"Unknown goodput criterion: {threshold_name}")
+                metric_value = metrics[metric_name]
+                meets = metric_value <= threshold_value
+            elif threshold_name.startswith("min_"):
+                metric_name = threshold_name[4:]
+                if metric_name not in metrics:
+                    raise ValueError(f"Unknown goodput criterion: {threshold_name}")
+                metric_value = metrics[metric_name]
+                meets = metric_value >= threshold_value
+            else:
+                raise ValueError(f"Unknown goodput criterion: {threshold_name}")
+            results.append({threshold_name: threshold_value, metric_name: metric_value, "meets": meets})
+        return results, all(r["meets"] for r in results)
 
     def _find_optimal_rate(
-        self, max_throughput: float, run_id: str, output_folder: str, engine_config: Dict
-    ) -> Tuple[Dict, List[Dict]]:
-        """
-        Find optimal rate that meets goodput criteria.
-        Args:
-            max_throughput (float): Maximum throughput from throughput benchmark.
-            run_id (str): Unique identifier for this benchmark run. Will be used for results file
-            output_folder (str): Directory to save benchmark results.
-            engine_config (str): Current docker engine command.
-        Returns:
-            Tuple[Dict, List[Dict]]: Metrics at optimal rate and goodput checks, or (None, None) if not found.
-        """
-        # Start with 90% of max throughput and decrease until goodput is met.
+        self, max_throughput: float, run_id: str, output_folder: str, engine_config: str
+    ) -> Tuple[Optional[Dict], Optional[List[Dict]]]:
         rate = max_throughput * 0.90
         attempts = 0
-        while rate > 0.1 and attempts < self.config["scenario"]["max_rate_finding_attempts"]:
-            # Sleep between rate tests to let any pending requests clear
-            time.sleep(3)
-
-            metrics = self._run_rate_benchmark(
-                rate=rate, run_id=run_id, output_folder=output_folder, engine_config=engine_config
-            )
+        scenario = self.config["scenario"]
+        while rate > 0.1 and attempts < scenario["max_rate_finding_attempts"]:
+            metrics = self._run_rate_benchmark(rate, run_id, output_folder, engine_config)
+            if not metrics:
+                rate *= 1 - scenario["rate_decrease_factor"]
+                attempts += 1
+                continue
 
             self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
-
             goodput_checks, meets = self._meets_goodput_criteria(metrics)
             self.logger.info("Goodput SLOs checks:")
             self.logger.info(json.dumps(goodput_checks, indent=2))
-
             if meets:
                 self.logger.info(f"Found optimal rate: {rate:.2f} req/s")
-
                 return metrics, goodput_checks
-            else:
-                self.logger.info("Goodput criteria not met, finding optimal rate for this config...")
-                self.logger.info(f"{'=' * 60}")
-                rate *= 1 - self.config["scenario"]["rate_decrease_factor"]
-                attempts += 1
-
+            rate *= 1 - scenario["rate_decrease_factor"]
+            attempts += 1
         return None, None
 
     def _generate_parameter_combinations(self) -> List[Dict]:
-        """
-        Generate all parameter combinations to test.
-        """
         engine_config = self.config["engine"]
         value_args_pool = engine_config.get("value_args_pool", {})
         action_args_pool = engine_config.get("action_args_pool", {})
-
-        # Get parameter names and values for each type
         if not value_args_pool and not action_args_pool:
             self.logger.warning("No tunable parameters defined in config, only base args will be used.")
-            return []
+            return [{"value_args": {}, "action_args": {}}]
 
-        value_param_names = []
-        value_param_values = []
-        action_param_names = []
-        action_param_values = []
-        if value_args_pool:
-            value_param_names = list(value_args_pool.keys())
-            value_param_values = [value_args_pool[name] for name in value_param_names]
-        if action_args_pool:
-            action_param_names = list(action_args_pool.keys())
-            action_param_values = [action_args_pool[name] for name in action_param_names]
-
-        # Generate all combinations
+        value_param_names = list(value_args_pool.keys())
+        action_param_names = list(action_args_pool.keys())
+        value_combinations = list(product(*[value_args_pool[name] for name in value_param_names])) or [()]
+        action_combinations = list(product(*[action_args_pool[name] for name in action_param_names])) or [()]
         combinations = []
-
-        # Generate combinations for value params (or empty if none)
-        value_combinations = list(product(*value_param_values)) if value_param_values else [()]
-        action_combinations = list(product(*action_param_values)) if action_param_values else [()]
-
         for value_combo in value_combinations:
             for action_combo in action_combinations:
                 combination = {
-                    "value_args": dict(zip(value_param_names, value_combo)) if value_param_names else {},
-                    "action_args": dict(zip(action_param_names, action_combo)) if action_param_names else {},
+                    "value_args": dict(zip(value_param_names, value_combo)),
+                    "action_args": dict(zip(action_param_names, action_combo)),
                 }
-
-                # Handle special case for tp-dp-combinations
-                if "tp-dp-combinations" in combination["value_args"].keys():
+                if "tp-dp-combinations" in combination["value_args"]:
                     tp_dp_comb = combination["value_args"].pop("tp-dp-combinations")
                     combination["value_args"]["tensor_parallel_size"] = tp_dp_comb["tp"]
                     combination["value_args"]["data_parallel_size"] = tp_dp_comb["dp"]
-
                 combinations.append(combination)
-
         self.logger.info(
             f"Generated {len(combinations)} parameter combinations to test for engine {engine_config['name']}."
         )
-
         return combinations
 
-    def run_auto_tune(self) -> Dict:
-        """
-        Run the auto-tuning process.
-        """
-        # TODO: implement verbose/normal logging levels.
-        self.logger.info(f"Starting auto-tune process...")
+    def _failed_result(self, run_id: str, param_config: Dict, engine_args: List[str], reason: str) -> Dict:
+        return {
+            "run_id": run_id,
+            "tunable_parameters_config": param_config,
+            "engine_container_command": engine_args,
+            "failure_reason": reason,
+        }
 
-        # TODO: extend to support multiple engine auto-tuning.
+    def run_auto_tune(self) -> Dict:
+        self.logger.info("Starting auto-tune process...")
         engine_name = self.config["engine"]["name"]
         autotune_id = uuid.uuid4().hex[:4]
         engine_path = self.results_dir.joinpath(engine_name, f"run_{self.timestamp}_{autotune_id}")
         engine_path.mkdir(parents=True, exist_ok=True)
-
         param_combinations = self._generate_parameter_combinations()
-
-        # Copy config file to results folder
         shutil.copy2(self.config_path, engine_path / "auto_tune_config.yaml")
 
         all_results = []
+        failed_results = []
         for i, param_config in enumerate(param_combinations, 1):
+            container = None
+            engine_args = []
+            run_id = f"{self.config['model'].replace('/', '--')}_{uuid.uuid4().hex[:4]}"
             self.logger.info(f"{'=' * 60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
 
-            # TODO: add model_name metadata to the run_id.
-            run_id = uuid.uuid4().hex[:4]
-
-            # TODO: if throughput is a goodput criteria, only perform throughput benchmark.
-            # It makes no sense to do rate finding (decrease rate) if rate is a requirement and is not met by throughput bench.
             try:
                 engine_args = self._build_engine_args(param_config)
-                container = self._launch_docker_engine(engine_args)
+                container = self.engine_runner.launch(self._engine_spec(engine_args), name_prefix="autotune")
                 if not container:
+                    failed_results.append(self._failed_result(run_id, param_config, engine_args, "launch_failed"))
+                    continue
+                if not self.engine_runner.wait_ready(container, self.config["port"], timeout=700):
+                    failed_results.append(self._failed_result(run_id, param_config, engine_args, "server_not_ready"))
                     continue
 
-                if not self._wait_for_server_ready(container, self.config["port"]):
-                    self.logger.error("Server failed to start properly")
-                    continue
-
-                metrics = self._run_throughput_benchmark(
-                    run_id=run_id,
-                    output_folder=engine_path.as_posix(),
-                    engine_config=" ".join([str(a) for a in engine_args]),
-                )
+                engine_command = " ".join(str(arg) for arg in engine_args)
+                metrics = self._run_throughput_benchmark(run_id, engine_path.as_posix(), engine_command)
                 if not metrics:
-                    self.logger.error("Failed to run throughput benchmark, continuing to next config...")
+                    failed_results.append(
+                        self._failed_result(run_id, param_config, engine_args, "throughput_benchmark_failed")
+                    )
                     continue
 
                 self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
-
                 goodput_checks, meets = self._meets_goodput_criteria(metrics)
                 self.logger.info("Goodput SLOs checks:")
                 self.logger.info(json.dumps(goodput_checks, indent=2))
-
                 if not meets:
-                    # if 90% of throughput is less than best found so far, skip rate finding.
-                    # rate finding starts at 90% of throughput.
                     if (metrics["throughput"] * 0.90) <= self.best_throughput["throughput"]:
-                        self.logger.info(
-                            "Goodput criteria not met, but throughput is worse than best found so far. Skipping rate finding..."
+                        failed_results.append(
+                            self._failed_result(run_id, param_config, engine_args, "goodput_not_met")
                         )
-                        self.logger.info(f"{'=' * 60}")
                         continue
-
-                    self.logger.info("Goodput criteria not met, finding optimal rate for this config...")
-                    self.logger.info(f"{'=' * 60}")
                     metrics, goodput_checks = self._find_optimal_rate(
-                        metrics["throughput"],
-                        run_id=run_id,
-                        output_folder=engine_path.as_posix(),
-                        engine_config=" ".join([str(a) for a in engine_args]),
+                        metrics["throughput"], run_id, engine_path.as_posix(), engine_command
                     )
                     if not metrics:
-                        self.logger.info(
-                            "Goodput criteria not met. No optimal rate found for this configuration. Continuing..."
+                        failed_results.append(
+                            self._failed_result(run_id, param_config, engine_args, "goodput_not_met")
                         )
-                        self.logger.info(f"{'=' * 60}")
                         continue
-
-                self.logger.info(
-                    f"Goodput criteria met! Max throughput: {metrics['throughput']:.2f} req/s for this configuration."
-                )
-                self.logger.info(f"{'=' * 60}")
 
                 result = {
                     "run_id": run_id,
@@ -660,45 +326,34 @@ class AutoTuner:
                 }
                 if metrics["throughput"] > self.best_throughput["throughput"]:
                     last_best = self.best_throughput["run_index"]
-                    self.best_throughput = {
-                        "throughput": metrics["throughput"],
-                        "run_index": len(all_results),
-                    }
-                    self.logger.info(
-                        f"NEW BEST CONFIG! Throughput: {self.best_throughput['throughput']:.2f} req/s"
-                    )
+                    self.best_throughput = {"throughput": metrics["throughput"], "run_index": len(all_results)}
                     result["is_best"] = True
                     if all_results and last_best is not None:
                         all_results[last_best]["is_best"] = False
-
+                    self.logger.info(f"NEW BEST CONFIG! Throughput: {metrics['throughput']:.2f} req/s")
                 all_results.append(result)
-            except Exception as e:
-                self.logger.error(f"Error testing parameter config {param_config}: {e}")
-                import traceback
-
-                traceback.print_exc()
+            except Exception as exc:
+                self.logger.exception(f"Error testing parameter config {param_config}: {exc}")
+                failed_results.append(self._failed_result(run_id, param_config, engine_args, str(exc)))
             finally:
                 if container:
-                    self._cleanup_container(container)
+                    self.engine_runner.cleanup(container)
 
-        # Save all results
+        summary = {
+            "timestamp": self.timestamp,
+            "config_file": self.config_path,
+            "engine_name": engine_name,
+            "benchmark_backend": self.benchmark_executor.name,
+            "instance_info": self.config.get("instance_info", {}),
+            "goodput_criteria": self.config["scenario"].get("goodput_criteria", {}),
+            "scenario": self.config["scenario"],
+            "all_results": all_results,
+            "failed_results": failed_results,
+        }
         results_file = engine_path / "auto_tune_results.json"
         with open(results_file, "w") as f:
-            json.dump(
-                {
-                    "timestamp": self.timestamp,
-                    "config_file": self.config_path,
-                    "engine_name": engine_name,
-                    "instance_info": self.config.get("instance_info", {}),
-                    "goodput_criteria": self.config["scenario"]["goodput_criteria"],
-                    "scenario": self.config["scenario"],
-                    "all_results": all_results,
-                },
-                f,
-                indent=2,
-            )
+            json.dump(summary, f, indent=2)
 
-        # Upload folder to Huggingface dataset if dataset_id is provided
         if self.dataset_id:
             self.logger.info(f"Uploading results to Huggingface dataset {self.dataset_id}...\n")
             hf_api.upload_folder(
@@ -709,8 +364,13 @@ class AutoTuner:
                 repo_type="dataset",
             )
 
-        # Print summary
         self.logger.info(f"{'=' * 60}")
         self.logger.info("AUTO-TUNE COMPLETE")
         self.logger.info(f"Tested {len(param_combinations)} parameter combinations.")
+        self.logger.info(f"Succeeded: {len(all_results)}, Failed: {len(failed_results)}")
+        if self.best_throughput["run_index"] is not None:
+            best = all_results[self.best_throughput["run_index"]]
+            self.logger.info(f"Best throughput: {best['metrics']['throughput']:.2f} req/s")
+            self.logger.info(f"Best config: {best['tunable_parameters_config']}")
         self.logger.info(f"Results saved to: {results_file}")
+        return summary

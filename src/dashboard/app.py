@@ -151,6 +151,9 @@ def run(from_results_dir, datasource, port):
 
     if from_results_dir is not None:
         build_results(from_results_dir, "benchmarks.parquet", None)
+        datasource = datasource or "file://benchmarks.parquet"
+    if datasource is None:
+        raise ValueError("Provide --from-results-dir or --datasource")
     # Load data
     df_bench = load_datasource(datasource, load_bench_results)
 
@@ -263,7 +266,7 @@ def run(from_results_dir, datasource, port):
 
 @click.command()
 @click.option("--from-results-dir", default=None, help="Load inference-benchmarker results from a directory")
-@click.option("--datasource", default="file://benchmarks.parquet", help="Load a Parquet file already generated")
+@click.option("--datasource", default=None, help="Load a Parquet file already generated")
 @click.option("--port", default=7860, help="Port to run the dashboard")
 def main(from_results_dir, datasource, port):
     run(from_results_dir, datasource, port)
