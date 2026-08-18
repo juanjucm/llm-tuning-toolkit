@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import shutil
-import subprocess
 import tempfile
 import time
 import uuid
@@ -17,11 +16,11 @@ import requests
 import yaml
 from huggingface_hub import HfApi
 
+from auto_tune.guidellm import GuideLLMError, GuideLLMRunner
+
 coloredlogs.install()
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
-BENCHMARK_TOOL_CMD = "inference-benchmarker"
-
 hf_api = HfApi()
 
 class AutoTuner:
@@ -37,8 +36,8 @@ class AutoTuner:
         self.config = self._load_config()
 
         if not result_dir:
-            temp_dir = tempfile.TemporaryDirectory()
-            self.root_dir = Path(temp_dir.name)
+            self._temp_dir = tempfile.TemporaryDirectory()
+            self.root_dir = Path(self._temp_dir.name)
         else:
             self.root_dir = Path(result_dir)
 
@@ -68,6 +67,7 @@ class AutoTuner:
 
         # Docker client
         self.docker_client = docker.from_env()
+        self.guidellm = GuideLLMRunner(self.config.get("guidellm", {}).get("command", "guidellm"))
 
     def _load_config(self) -> Dict:
         """
@@ -76,11 +76,38 @@ class AutoTuner:
         with open(self.config_path, "r") as f:
             config = yaml.safe_load(f)
 
-        required_keys = ["scenario", "engine"]
+        required_keys = ["scenario", "engine", "model", "port", "instance_info"]
         for key in required_keys:
             if key not in config:
                 raise ValueError(f"Missing required config key: {key}")
 
+        scenario = config["scenario"]
+        if "data" not in scenario:
+            # The old prompt/decode descriptors were specific to inference-benchmarker.
+            # Failing explicitly prevents a silent benchmark with a different workload.
+            raise ValueError(
+                "scenario.data is required and must contain one or more GuideLLM data descriptors. "
+                "See examples/guidellm-auto-tune.yaml."
+            )
+        if not isinstance(scenario["data"], list) or not scenario["data"]:
+            raise ValueError("scenario.data must be a non-empty list of GuideLLM data descriptors")
+        scenario.setdefault("slos", scenario.pop("goodput_criteria", {}))
+        scenario.setdefault("throughput_duration_seconds", 90)
+        scenario.setdefault("rate_duration_seconds", 30)
+        scenario.setdefault("max_rate_finding_attempts", 3)
+        scenario.setdefault("rate_decrease_factor", 0.3)
+        # `max_vus` was the former inference-benchmarker name. Keep configs
+        # working while using GuideLLM's unambiguous load profile fields.
+        load = scenario.setdefault("load", {})
+        if not isinstance(load, dict):
+            raise ValueError("scenario.load must be a mapping")
+        load.setdefault("kind", "throughput")
+        if load["kind"] == "throughput":
+            load.setdefault("max_concurrency", scenario.get("max_vus", 128))
+        elif load["kind"] == "concurrent":
+            load.setdefault("streams", scenario.get("max_vus", 128))
+        else:
+            raise ValueError("scenario.load.kind must be 'throughput' or 'concurrent'")
         return config
 
     def _build_engine_args(self, param_config: Dict) -> List[str]:
@@ -199,109 +226,6 @@ class AutoTuner:
         self.logger.info(f"Removing container...")
         container.remove(force=True)
 
-    def _run_inference_benchmarker(self, bench_args: List[str]):
-        """
-        Run the benchmark command using inference-benchmarker tool
-
-        Args:
-            bench_args (List[str]): List of arguments for the benchmark tool.
-        Raises:
-            subprocess.CalledProcessError: If the benchmark command fails.
-        """
-        try:
-            cmd = [BENCHMARK_TOOL_CMD]
-            cmd.extend(bench_args)
-            cmd.extend(["--no-console"])  # disable UI
-
-            cmd = [str(c) for c in cmd]
-
-            self.logger.info(f"Running benchmark: {' '.join(cmd)}")
-            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=None, check=True)
-
-            # self.logger.info("=== SUBPROCESS OUTPUT ===")
-            # self.logger.info(f"Return code: {proc.returncode}")
-            # self.logger.info(f"STDOUT:\n{proc.stdout}")
-            # if proc.stderr:
-            #     self.logger.info(f"STDERR:\n{proc.stderr}")
-            self.logger.info("Benchmark completed successfully")
-
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Benchmark failed with return code {e.returncode}: {e}")
-            self.logger.error(f"Command: {' '.join(cmd)}")
-            self.logger.error(f"STDOUT:\n{e.stdout if e.stdout else 'None'}")
-            self.logger.error(f"STDERR:\n{e.stderr if e.stderr else 'None'}")
-
-            # Print full traceback for debugging
-            import traceback
-
-            self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            raise e
-        except Exception as e:
-            self.logger.error(f"Unexpected error running benchmark: {e}")
-            import traceback
-
-            self.logger.error(f"Full traceback:\n{traceback.format_exc()}")
-            raise e
-
-    def _get_metrics_from_results(self, results_dict: Dict) -> Dict:
-        """
-        Extract key metrics from benchmark results.
-        Results format expected to match inference-benchmarker output. Only one result should be present
-        since AutoTuner executes one-run throughput/rate benchmarks.
-
-        Args:
-            results_dict (Dict): Parsed JSON results from benchmark.
-        Returns:
-            Dict: Extracted metrics including throughput, latencies, success rates, etc.
-        """
-        metrics = {}
-        results = results_dict.get("results", [])
-        result = (
-            results[-1] if results else {}
-        )  # NOTE: following inference-benchmarker output logs format, take last result (skip warmup)
-
-        # Throughput and success metrics
-        metrics["throughput"] = result.get("request_rate", 0)
-        metrics["total_requests"] = result.get("total_requests", 0)
-        metrics["successful_requests"] = result.get("successful_requests", 0)
-        metrics["failed_requests"] = result.get("failed_requests", 0)
-        metrics["success_rate"] = result.get("successful_requests", 0) / max(result.get("total_requests", 1), 1)
-
-        # Latency metrics
-        ttft = result.get("time_to_first_token_ms", {})
-        e2e = result.get("e2e_latency_ms", {})
-        itl = result.get("inter_token_latency_ms", {})
-        metrics.update(
-            {
-                "ttft_p99_ms": ttft.get("p99", float("inf")),
-                "ttft_p95_ms": ttft.get("p95", float("inf")),
-                "ttft_p90_ms": ttft.get("p90", float("inf")),
-                "ttft_p80_ms": ttft.get("p80", float("inf")),
-                "ttft_p70_ms": ttft.get("p70", float("inf")),
-                "ttft_p60_ms": ttft.get("p60", float("inf")),
-                "ttft_p50_ms": ttft.get("p50", float("inf")),
-                "ttft_avg_ms": ttft.get("avg", float("inf")),
-                "e2e_p99_ms": e2e.get("p99", float("inf")),
-                "e2e_p95_ms": e2e.get("p95", float("inf")),
-                "e2e_p90_ms": e2e.get("p90", float("inf")),
-                "e2e_p80_ms": e2e.get("p80", float("inf")),
-                "e2e_p70_ms": e2e.get("p70", float("inf")),
-                "e2e_p60_ms": e2e.get("p60", float("inf")),
-                "e2e_p50_ms": e2e.get("p50", float("inf")),
-                "e2e_avg_ms": e2e.get("avg", float("inf")),
-                "itl_p99_ms": itl.get("p99", float("inf")),
-                "itl_p95_ms": itl.get("p95", float("inf")),
-                "itl_p90_ms": itl.get("p90", float("inf")),
-                "itl_p80_ms": itl.get("p80", float("inf")),
-                "itl_p70_ms": itl.get("p70", float("inf")),
-                "itl_p60_ms": itl.get("p60", float("inf")),
-                "itl_p50_ms": itl.get("p50", float("inf")),
-                "itl_avg_ms": itl.get("avg", float("inf")),
-            }
-        )
-
-        return metrics
-
     def _run_throughput_benchmark(self, run_id: str, output_folder: str, engine_config: str) -> Optional[Dict]:
         """Run throughput benchmark to discover maximum throughput
 
@@ -318,57 +242,26 @@ class AutoTuner:
         port = self.config["port"]
         output_file = os.path.join(output_folder, f"throughput_{run_id}.json")
 
-        # Build benchmark arguments for throughput test
-        bench_args = [
-            "--url",
-            f"http://localhost:{port}",
-            "--benchmark-kind",
-            "throughput",
-            "--max-vus",
-            str(scenario["max_vus"]),
-            "--duration",
-            scenario["throughput_duration"],
-            "--tokenizer-name",
-            self.config["model"],
-            "--output-path",
-            output_file,
-            "--run-id",
-            run_id,
-        ]
-
-        if scenario.get("prompt_options"):
-            bench_args.extend(["--prompt-options", scenario["prompt_options"]])
-        if scenario.get("decode_options"):
-            bench_args.extend(["--decode-options", scenario["decode_options"]])
-
-        if scenario.get("dataset_file"):
-            bench_args.extend(["--dataset-file", scenario["dataset_file"]])
-
-        metadata = (
-            f"autotune=true,engine_name={self.config['engine']['name']},docker_engine_args={engine_config}"
-        )
-        bench_args.extend(["--extra-meta", metadata])
-
         try:
-            self._run_inference_benchmarker(bench_args)
-        except Exception as e:
+            return self.guidellm.run(
+                target=f"http://localhost:{port}",
+                backend=scenario.get("backend"),
+                data=scenario["data"],
+                profile=self._primary_profile(),
+                duration_seconds=scenario["throughput_duration_seconds"],
+                output_path=Path(output_file),
+                options=scenario.get("guidellm_options"),
+            )
+        except GuideLLMError as e:
             self.logger.error(f"Throughput benchmark failed: {e}")
             return None
 
-        # return metrics
-        metrics = {}
-        if os.path.exists(output_file):
-            with open(output_file, "r") as f:
-                results = json.load(f)
-                metrics = self._get_metrics_from_results(results)
-                if metrics:
-                    return metrics
-                else:
-                    self.logger.error("Failed to extract metrics from results.")
-                    return None
-        else:
-            self.logger.error("Results file not found after benchmark")
-            return None
+    def _primary_profile(self) -> Dict:
+        """Build the GuideLLM profile for the scenario's production load model."""
+        load = self.config["scenario"]["load"]
+        if load["kind"] == "throughput":
+            return {"kind": "throughput", "max_concurrency": load["max_concurrency"]}
+        return {"kind": "concurrent", "streams": load["streams"]}
 
     def _run_rate_benchmark(
         self, rate: float, run_id: str, output_folder: str, engine_config: str
@@ -389,57 +282,22 @@ class AutoTuner:
         port = self.config["port"]
         output_file = os.path.join(output_folder, f"rate_@{rate:.2f}_{run_id}.json")
 
-        # Build benchmark arguments for rate test
-        bench_args = [
-            "--url",
-            f"http://localhost:{port}",
-            "--benchmark-kind",
-            "rate",
-            "--max-vus",
-            str(scenario["max_vus"]),
-            "--duration",
-            str(scenario["rate_duration"]),
-            "--rates",
-            str(rate),
-            "--prompt-options",
-            scenario["prompt_options"],
-            "--decode-options",
-            scenario["decode_options"],
-            "--tokenizer-name",
-            self.config["model"],
-            "--output-path",
-            output_file,
-            "--run-id",
-            run_id,
-        ]
-
-        if scenario.get("dataset_file"):
-            bench_args.extend(["--dataset-file", scenario["dataset_file"]])
-
-        metadata = (
-            f"autotune=true,engine_name={self.config['engine']['name']},docker_engine_args={engine_config}"
-        )
-        bench_args.extend(["--extra-meta", metadata])
-
         try:
-            self._run_inference_benchmarker(bench_args)
-        except Exception as e:
+            return self.guidellm.run(
+                target=f"http://localhost:{port}",
+                backend=scenario.get("backend"),
+                data=scenario["data"],
+                profile={
+                    "kind": "constant",
+                    "rate": rate,
+                    "max_concurrency": scenario["load"]["max_concurrency"],
+                },
+                duration_seconds=scenario["rate_duration_seconds"],
+                output_path=Path(output_file),
+                options=scenario.get("guidellm_options"),
+            )
+        except GuideLLMError as e:
             self.logger.error(f"Rate benchmark failed: {e}")
-            return None
-
-        # return metrics
-        metrics = {}
-        if os.path.exists(output_file):
-            with open(output_file, "r") as f:
-                results = json.load(f)
-                metrics = self._get_metrics_from_results(results)
-                if metrics:
-                    return metrics
-                else:
-                    self.logger.error("Failed to extract metrics from results.")
-                    return None
-        else:
-            self.logger.error("Results file not found after benchmark")
             return None
 
     def _meets_goodput_criteria(self, metrics: Dict) -> Tuple[List[Dict], bool]:
@@ -451,23 +309,22 @@ class AutoTuner:
         Returns:
             Tuple[List[Dict], bool]: List of threshold checks and overall meets status.
         """
-        thresholds = self.config["scenario"]["goodput_criteria"]
+        thresholds = self.config["scenario"]["slos"]
 
-        # for each metric in metrics, check if a threshold exists and check if reached
         results = []
-        for metric_name, metric_value in metrics.items():
-            for threshold_name, threshold_value in thresholds.items():
-                if metric_name in threshold_name:
-                    if ("max" in threshold_name and metric_value > threshold_value) or (
-                        "min" in threshold_name and metric_value < threshold_value
-                    ):
-                        results.append(
-                            {threshold_name: threshold_value, metric_name: metric_value, "meets": False}
-                        )
-                    else:
-                        results.append(
-                            {threshold_name: threshold_value, metric_name: metric_value, "meets": True}
-                        )
+        for threshold_name, threshold_value in thresholds.items():
+            if threshold_name.startswith("max_"):
+                metric_name = threshold_name.removeprefix("max_")
+                comparison = lambda value: value <= threshold_value
+            elif threshold_name.startswith("min_"):
+                metric_name = threshold_name.removeprefix("min_")
+                comparison = lambda value: value >= threshold_value
+            else:
+                raise ValueError(f"SLO '{threshold_name}' must start with min_ or max_")
+            if metric_name not in metrics:
+                raise ValueError(f"SLO '{threshold_name}' refers to unsupported metric '{metric_name}'")
+            metric_value = metrics[metric_name]
+            results.append({threshold_name: threshold_value, metric_name: metric_value, "meets": comparison(metric_value)})
 
         meets = all(r["meets"] for r in results)
 
@@ -497,6 +354,11 @@ class AutoTuner:
                 rate=rate, run_id=run_id, output_folder=output_folder, engine_config=engine_config
             )
 
+            if not metrics:
+                self.logger.warning("Rate benchmark did not produce metrics; trying a lower rate.")
+                rate *= 1 - self.config["scenario"]["rate_decrease_factor"]
+                attempts += 1
+                continue
             self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
 
             goodput_checks, meets = self._meets_goodput_criteria(metrics)
@@ -526,7 +388,7 @@ class AutoTuner:
         # Get parameter names and values for each type
         if not value_args_pool and not action_args_pool:
             self.logger.warning("No tunable parameters defined in config, only base args will be used.")
-            return []
+            return [{"value_args": {}, "action_args": {}}]
 
         value_param_names = []
         value_param_values = []
@@ -587,6 +449,7 @@ class AutoTuner:
 
         all_results = []
         for i, param_config in enumerate(param_combinations, 1):
+            container = None
             self.logger.info(f"{'=' * 60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
 
@@ -620,7 +483,7 @@ class AutoTuner:
                 self.logger.info("Goodput SLOs checks:")
                 self.logger.info(json.dumps(goodput_checks, indent=2))
 
-                if not meets:
+                if not meets and self.config["scenario"]["load"]["kind"] == "throughput":
                     # if 90% of throughput is less than best found so far, skip rate finding.
                     # rate finding starts at 90% of throughput.
                     if (metrics["throughput"] * 0.90) <= self.best_throughput["throughput"]:
@@ -644,6 +507,12 @@ class AutoTuner:
                         )
                         self.logger.info(f"{'=' * 60}")
                         continue
+                elif not meets:
+                    self.logger.info(
+                        "SLOs are not met at the configured concurrent stream count; "
+                        "skipping this configuration."
+                    )
+                    continue
 
                 self.logger.info(
                     f"Goodput criteria met! Max throughput: {metrics['throughput']:.2f} req/s for this configuration."
@@ -678,7 +547,7 @@ class AutoTuner:
 
                 traceback.print_exc()
             finally:
-                if container:
+                if container is not None:
                     self._cleanup_container(container)
 
         # Save all results
@@ -690,7 +559,7 @@ class AutoTuner:
                     "config_file": self.config_path,
                     "engine_name": engine_name,
                     "instance_info": self.config.get("instance_info", {}),
-                    "goodput_criteria": self.config["scenario"]["goodput_criteria"],
+                    "slos": self.config["scenario"]["slos"],
                     "scenario": self.config["scenario"],
                     "all_results": all_results,
                 },

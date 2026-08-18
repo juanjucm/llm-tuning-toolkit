@@ -8,11 +8,9 @@ Toolkit for automatic tuning and benchmarking of LLM serving configurations.
 
 ## Prerequisites
 
-This project requires `inference-benchmarker`. Install it using:
-
-```bash
-cargo install --git https://github.com/juanjucm/inference-benchmarker/
-```
+Auto-tuning uses [GuideLLM](https://github.com/vllm-project/guidellm) against
+the OpenAI-compatible endpoint exposed by each engine container. It is installed
+with the project dependencies.
 
 ## Installation
 
@@ -31,7 +29,29 @@ uv pip install -e .
 
 This module provides a way to automatically detect the best LLM serving configuration that maximises throughput while being complient with a set of defined goodput criteria.
 
-For running the script, make sure to provide a valid config yaml. Take a loot at `auto-tune-config.yaml` to check the format and expected parameters.
+For a complete configuration, start with
+[`examples/guidellm-auto-tune.yaml`](examples/guidellm-auto-tune.yaml). The
+`scenario.data` list maps directly to GuideLLM `--data` descriptors, so it can
+use synthetic text, local/Hugging Face datasets, trace replay, and multimodal
+data. The tuner runs GuideLLM's throughput profile for each engine sweep, then
+uses a constant-rate profile at progressively lower rates until every configured
+SLO is met.
+
+Set `scenario.load.kind` to `throughput` with `max_concurrency` for capacity
+search, or to `concurrent` with `streams` for a fixed number of continuously
+active users. Throughput mode uses the SLO-driven rate-reduction search;
+concurrent mode evaluates each engine configuration at the declared stream count.
+
+SLO names use `min_` or `max_` followed by a normalized metric, such as
+`min_success_rate`, `max_ttft_p99_ms`, `max_e2e_p99_ms`, or
+`min_output_tokens_per_second`. Results include raw GuideLLM JSON reports plus
+`auto_tune_results.json` with the selected deployment configuration.
+
+For tool calling, provide a GuideLLM dataset with tool-call messages and add the
+`tool_calling_message_extractor` data preprocessor through
+`scenario.guidellm_options.arguments`. Enable the matching vLLM tool parser in
+the engine's `base_args`. For vision/audio/video, pass GuideLLM multimodal data
+descriptors in the same `scenario.data` list.
 
 ```console
 usage: uv run auto-tune [-h] [--config <config.yaml>] [--result-dir <result_dir>] [--dataset-id <dataset_id>] [--hf-token <hf_token>]
@@ -40,7 +60,7 @@ Auto-tune tool for finding optimal engine parameters.
 
 options:
   -h, --help    show this help message and exit
-  --config      Path to auto-tune configuration file
+  --config      Path to GuideLLM auto-tune configuration file
   --result-dir (optional) Directory to save tuning results
   --dataset-id (optional) Huggingface dataset where to dump results
   --hf-token   (optional) Huggingface token to use for accesing models and dataset.
