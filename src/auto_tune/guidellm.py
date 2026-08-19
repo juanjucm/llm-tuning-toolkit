@@ -41,15 +41,37 @@ def extract_metrics(report: dict[str, Any]) -> dict[str, float]:
     metrics = result.metrics
     totals = metrics.request_totals
 
+    def percentile_value(percentiles: Any, percentile: int) -> float | None:
+        """Read a percentile without assuming every GuideLLM version exposes it.
+
+        GuideLLM's standard percentile set is version-dependent (for example,
+        some releases provide p50/p75/p90/p95/p99 but not p60).  Reports may
+        also represent percentile values as a mapping rather than attributes.
+        """
+        name = f"p{percentile}"
+        value = getattr(percentiles, name, None)
+        if value is not None:
+            return float(value)
+
+        if hasattr(percentiles, "model_dump"):
+            percentiles = percentiles.model_dump()
+        if isinstance(percentiles, dict):
+            for key in (name, str(percentile), str(percentile / 100), percentile, percentile / 100):
+                value = percentiles.get(key)
+                if value is not None:
+                    return float(value)
+        return None
+
     def milliseconds(summary: Any, *, already_ms: bool) -> dict[str, float]:
         factor = 1 if already_ms else 1000
-        return {
+        values = {
             "avg_ms": summary.successful.mean * factor,
-            **{
-                f"p{percentile}_ms": getattr(summary.successful.percentiles, f"p{percentile}") * factor
-                for percentile in (50, 60, 70, 80, 90, 95, 99)
-            },
         }
+        for percentile in (50, 60, 70, 80, 90, 95, 99):
+            value = percentile_value(summary.successful.percentiles, percentile)
+            if value is not None:
+                values[f"p{percentile}_ms"] = value * factor
+        return values
 
     normalized: dict[str, float] = {
         "throughput": metrics.requests_per_second.successful.mean,

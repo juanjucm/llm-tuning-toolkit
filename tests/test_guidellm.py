@@ -28,9 +28,7 @@ class GuideLLMAdapterTests(unittest.TestCase):
                     mean=mean,
                     percentiles=SimpleNamespace(
                         p50=mean,
-                        p60=mean,
-                        p70=mean,
-                        p80=mean,
+                        p75=mean,
                         p90=mean,
                         p95=mean,
                         p99=p99,
@@ -56,6 +54,7 @@ class GuideLLMAdapterTests(unittest.TestCase):
         self.assertEqual(metrics["success_rate"], 1.0)
         self.assertEqual(metrics["ttft_p99_ms"], 20.0)
         self.assertEqual(metrics["e2e_p99_ms"], 50.0)
+        self.assertNotIn("ttft_p60_ms", metrics)
 
     def test_runner_serializes_nested_data_and_writes_to_requested_path(self):
         with tempfile.TemporaryDirectory() as directory:
