@@ -12,6 +12,9 @@ Auto-tuning uses [GuideLLM](https://github.com/vllm-project/guidellm) against
 the OpenAI-compatible endpoint exposed by each engine container. It is installed
 with the project dependencies.
 
+GuideLLM keeps its normal terminal output during auto-tuning, including its live
+benchmark progress. The tuner logs are shown before and after each GuideLLM run.
+
 ## Installation
 
 First you need to setup your environment with [`uv`](https://github.com/astral-sh/uv).

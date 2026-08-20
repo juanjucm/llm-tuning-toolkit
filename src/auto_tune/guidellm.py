@@ -124,7 +124,6 @@ class GuideLLMRunner:
             _descriptor({"kind": "json", "path": str(output_path)}),
             "--metrics",
             _descriptor({"kind": "generative", "sample_size": (options or {}).get("sample_size", 0)}),
-            "--disable-console",
         ]
         for item in data:
             cmd.extend(["--data", _descriptor(item)])
@@ -140,13 +139,11 @@ class GuideLLMRunner:
                 cmd.extend([flag, _descriptor(value) if isinstance(value, dict) else str(value)])
 
         try:
-            subprocess.run(cmd, capture_output=True, text=True, check=True)
+            subprocess.run(cmd, check=True)
         except FileNotFoundError as error:
             raise GuideLLMError("GuideLLM is not installed; install the project dependencies first") from error
         except subprocess.CalledProcessError as error:
-            raise GuideLLMError(
-                f"GuideLLM failed ({error.returncode}): {error.stderr or error.stdout}"
-            ) from error
+            raise GuideLLMError(f"GuideLLM failed with exit code {error.returncode}") from error
         if not output_path.exists():
             raise GuideLLMError(f"GuideLLM completed without creating {output_path}")
         with output_path.open() as file:

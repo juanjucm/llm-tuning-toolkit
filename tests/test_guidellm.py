@@ -78,6 +78,8 @@ class GuideLLMAdapterTests(unittest.TestCase):
 
             command = run.call_args.args[0]
             self.assertEqual(command[:2], ["guidellm", "run"])
+            self.assertNotIn("--disable-console", command)
+            self.assertNotIn("capture_output", run.call_args.kwargs)
             self.assertEqual(metrics["throughput"], 5.0)
             self.assertTrue(output_path.exists())
 
