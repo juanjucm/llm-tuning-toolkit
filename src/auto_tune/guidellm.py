@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -107,6 +108,7 @@ class GuideLLMRunner:
         output_path: Path,
         backend: dict[str, Any] | str | None = None,
         options: dict[str, Any] | None = None,
+        on_output: Callable[[str], None] | None = None,
     ) -> dict[str, float]:
         backend_config: dict[str, Any] | str = backend or {"kind": "openai_http", "target": target}
         if isinstance(backend_config, dict):
@@ -138,12 +140,44 @@ class GuideLLMRunner:
             elif value is not None:
                 cmd.extend([flag, _descriptor(value) if isinstance(value, dict) else str(value)])
 
+        # When output is being embedded in another Rich Live display, disable
+        # GuideLLM's own interactive Live view. Its normal status and result
+        # output remains available on the pipe and is streamed to the callback.
+        if on_output is not None and "--disable-console" not in cmd and "--disable-console-interactive" not in cmd:
+            cmd.append("--disable-console-interactive")
+
+        if on_output is None:
+            try:
+                subprocess.run(cmd, check=True)
+            except FileNotFoundError as error:
+                raise GuideLLMError("GuideLLM is not installed; install the project dependencies first") from error
+            except subprocess.CalledProcessError as error:
+                raise GuideLLMError(f"GuideLLM failed with exit code {error.returncode}") from error
+            return self._read_metrics(output_path)
+
         try:
-            subprocess.run(cmd, check=True)
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
         except FileNotFoundError as error:
             raise GuideLLMError("GuideLLM is not installed; install the project dependencies first") from error
-        except subprocess.CalledProcessError as error:
-            raise GuideLLMError(f"GuideLLM failed with exit code {error.returncode}") from error
+        assert process.stdout is not None
+        for line in process.stdout:
+            if on_output:
+                on_output(line)
+        returncode = process.wait()
+        if returncode:
+            raise GuideLLMError(f"GuideLLM failed with exit code {returncode}")
+
+        return self._read_metrics(output_path)
+
+    @staticmethod
+    def _read_metrics(output_path: Path) -> dict[str, float]:
+        """Read and normalize the JSON report created by GuideLLM."""
         if not output_path.exists():
             raise GuideLLMError(f"GuideLLM completed without creating {output_path}")
         with output_path.open() as file:

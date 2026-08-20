@@ -240,7 +240,7 @@ the engine's `base_args`. For vision/audio/video, pass GuideLLM multimodal data
 descriptors in the same `scenario.data` list.
 
 ```console
-usage: uv run auto-tune [-h] [--config <config.yaml>] [--result-dir <result_dir>] [--dataset-id <dataset_id>] [--hf-token <hf_token>]
+usage: uv run auto-tune [-h] [--config <config.yaml>] [--result-dir <result_dir>] [--dataset-id <dataset_id>] [--hf-token <hf_token>] [--no-ui]
 
 Auto-tune tool for finding optimal engine parameters.
 
@@ -250,7 +250,14 @@ options:
   --result-dir (optional) Directory to save tuning results
   --dataset-id (optional) Huggingface dataset where to dump results
   --hf-token   (optional) Huggingface token to use for accesing models and dataset.
+  --no-ui      Disable the live terminal view and use normal log output instead.
 ```
+
+By default, auto-tune uses a colored static terminal view showing sweep progress,
+the active parameter combination, the best valid throughput, recent events, and a
+rolling copy of GuideLLM's status and final CLI output. GuideLLM's nested interactive
+view is disabled in this mode so it does not conflict with the auto-tune display. Use
+`--no-ui` for CI logs, redirected output, or GuideLLM's native interactive terminal view.
 
 ## Multi Benchmarking Usage
 

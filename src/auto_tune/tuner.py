@@ -17,6 +17,7 @@ import requests
 import yaml
 from huggingface_hub import HfApi
 
+from auto_tune.display import AutoTuneDisplay
 from auto_tune.guidellm import GuideLLMError, GuideLLMRunner
 from auto_tune.tracking import TrackioTracker
 
@@ -24,6 +25,22 @@ coloredlogs.install()
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 hf_api = HfApi()
+
+
+class _DisplayLogHandler(logging.Handler):
+    """Route application logs into the Rich live display."""
+
+    def __init__(self, display: AutoTuneDisplay) -> None:
+        super().__init__()
+        self.display = display
+
+    def emit(self, record: logging.LogRecord) -> None:
+        message = record.getMessage()
+        if record.exc_info and record.exc_info[1]:
+            error = record.exc_info[1]
+            message = f"{message}\n{type(error).__name__}: {error}"
+        self.display.log(message, record.levelname)
+
 
 class AutoTuner:
     def __init__(
@@ -33,6 +50,7 @@ class AutoTuner:
         dataset_id: Optional[str] = None,
         cache_dir: Optional[str] = None,
         hf_token: Optional[str] = None,
+        display: Optional[AutoTuneDisplay] = None,
     ):
         self.config_path = config_path
         self.config = self._load_config()
@@ -56,6 +74,7 @@ class AutoTuner:
         self.dataset_id = dataset_id
         self.hf_token = hf_token or HF_TOKEN
         self.cache_dir = cache_dir
+        self.display = display
 
         self.best_throughput = {
             "run_index": None,
@@ -65,12 +84,40 @@ class AutoTuner:
 
         # Set up logging
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(f"{__name__}.AutoTuner.{id(self)}")
+        self.logger.setLevel(logging.INFO)
+        self._display_log_handler: Optional[_DisplayLogHandler] = None
+        if self.display:
+            self._display_log_handler = _DisplayLogHandler(self.display)
+            self.logger.addHandler(self._display_log_handler)
+            self.logger.propagate = False
 
         # Docker client
         self.docker_client = docker.from_env()
         self.guidellm = GuideLLMRunner(self.config.get("guidellm", {}).get("command", "guidellm"))
         self.tracker = TrackioTracker(self.config.get("trackio"), self.logger)
+
+    def _set_display_status(self, status: str) -> None:
+        display = getattr(self, "display", None)
+        if display:
+            display.set_status(status)
+
+    def _add_guidellm_output(self, line: str) -> None:
+        display = getattr(self, "display", None)
+        if display:
+            display.add_guidellm_output(line)
+
+    def _close_display(self) -> None:
+        """Stop the live view and detach its logger handler."""
+        try:
+            if self.display:
+                self.display.stop()
+        finally:
+            if self._display_log_handler:
+                self.logger.removeHandler(self._display_log_handler)
+                self._display_log_handler.close()
+                self._display_log_handler = None
+                self.logger.propagate = True
 
     def _load_config(self) -> Dict:
         """
@@ -263,6 +310,7 @@ class AutoTuner:
             bool: True if server is ready, False if timeout occurs.
         """
         self.logger.info("Waiting for engine to be ready...")
+        self._set_display_status("Waiting for engine health check")
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
@@ -275,6 +323,7 @@ class AutoTuner:
                 response = requests.get(f"http://localhost:{port}/health", timeout=5)
                 if response.status_code == 200:
                     self.logger.info("Engine is ready!")
+                    self._set_display_status("Engine ready")
                     return True
             except requests.RequestException:
                 pass
@@ -319,6 +368,7 @@ class AutoTuner:
             Optional[Dict]: Parsed benchmark results or None if failed.
         """
         self.logger.info("Running %s benchmark...", self.config["scenario"]["load"]["kind"])
+        self._set_display_status(f"Running GuideLLM {self.config['scenario']['load']['kind']} benchmark")
 
         scenario = self.config["scenario"]
         port = self.config["port"]
@@ -333,6 +383,7 @@ class AutoTuner:
                 constraints=scenario["constraints"],
                 output_path=Path(output_file),
                 options=scenario.get("guidellm_options"),
+                on_output=self._add_guidellm_output if self.display else None,
             )
         except GuideLLMError as e:
             self.logger.error(f"Throughput benchmark failed: {e}")
@@ -357,6 +408,7 @@ class AutoTuner:
             Optional[Dict]: Parsed benchmark results or None if failed.
         """
         self.logger.info(f"Running rate benchmark at {rate:.2f} req/s")
+        self._set_display_status(f"Running GuideLLM rate benchmark at {rate:.2f} req/s")
 
         scenario = self.config["scenario"]
         port = self.config["port"]
@@ -375,6 +427,7 @@ class AutoTuner:
                 constraints=scenario["rate_constraints"],
                 output_path=Path(output_file),
                 options=scenario.get("guidellm_options"),
+                on_output=self._add_guidellm_output if self.display else None,
             )
         except GuideLLMError as e:
             self.logger.error(f"Rate benchmark failed: {e}")
@@ -511,6 +564,13 @@ class AutoTuner:
         return combinations
 
     def run_auto_tune(self) -> Dict:
+        """Run auto-tuning and always release terminal display resources."""
+        try:
+            return self._run_auto_tune()
+        finally:
+            self._close_display()
+
+    def _run_auto_tune(self) -> Dict:
         """
         Run the auto-tuning process.
         """
@@ -524,6 +584,12 @@ class AutoTuner:
         engine_path.mkdir(parents=True, exist_ok=True)
 
         param_combinations = self._generate_parameter_combinations()
+        if self.display:
+            self.display.start(
+                total_configs=len(param_combinations),
+                scenario_name=self.config["scenario"]["name"],
+                model=self.config["model"],
+            )
 
         # Copy config file to results folder
         shutil.copy2(self.config_path, engine_path / "auto_tune_config.yaml")
@@ -533,6 +599,8 @@ class AutoTuner:
             container = None
             self.logger.info(f"{'=' * 60}")
             self.logger.info(f"[{i}/{len(param_combinations)}] Testing parameter combination: {param_config}")
+            if self.display:
+                self.display.begin_config(i, len(param_combinations), param_config)
 
             # TODO: add model_name metadata to the run_id.
             run_id = uuid.uuid4().hex[:4]
@@ -631,6 +699,8 @@ class AutoTuner:
                         "throughput": metrics["throughput"],
                         "run_index": len(all_results),
                     }
+                    if self.display:
+                        self.display.set_best(metrics["throughput"])
                     self.logger.info(
                         f"NEW BEST CONFIG! Throughput: {self.best_throughput['throughput']:.2f} req/s"
                     )
@@ -640,14 +710,15 @@ class AutoTuner:
 
                 all_results.append(result)
             except Exception as e:
-                self.logger.error(f"Error testing parameter config {param_config}: {e}")
-                import traceback
-
-                traceback.print_exc()
+                self.logger.exception("Error testing parameter config %s: %s", param_config, e)
             finally:
-                if container is not None:
-                    self._cleanup_container(container)
                 self.tracker.finish_run()
+                try:
+                    if container is not None:
+                        self._cleanup_container(container)
+                finally:
+                    if self.display:
+                        self.display.complete_config(i)
 
         # Save all results
         results_file = engine_path / "auto_tune_results.json"
@@ -682,3 +753,4 @@ class AutoTuner:
         self.logger.info("AUTO-TUNE COMPLETE")
         self.logger.info(f"Tested {len(param_combinations)} parameter combinations.")
         self.logger.info(f"Results saved to: {results_file}")
+        self._set_display_status("Complete")

@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+from auto_tune.display import AutoTuneDisplay
 from auto_tune.tuner import AutoTuner
 
 HF_TOKEN = os.getenv("HF_TOKEN", "")
@@ -19,6 +20,11 @@ parser.add_argument(
 parser.add_argument(
     "--hf-token", default=HF_TOKEN, help="Huggingface token to use for accesing models and dataset."
 )
+parser.add_argument(
+    "--no-ui",
+    action="store_true",
+    help="Disable the Rich live display and use normal log output instead.",
+)
 
 
 def main() -> None:
@@ -28,5 +34,10 @@ def main() -> None:
         print(f"Error: Configuration file not found: {args.config}")
         sys.exit(1)
 
-    tuner = AutoTuner(args.config, args.result_dir, args.dataset_id, args.cache_dir, args.hf_token)
-    tuner.run_auto_tune()
+    display = None if args.no_ui else AutoTuneDisplay()
+    tuner = AutoTuner(args.config, args.result_dir, args.dataset_id, args.cache_dir, args.hf_token, display)
+    try:
+        tuner.run_auto_tune()
+    finally:
+        if display:
+            display.stop()

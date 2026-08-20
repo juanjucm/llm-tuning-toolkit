@@ -13,6 +13,16 @@ from auto_tune.tuner import AutoTuner
 
 
 class GuideLLMAdapterTests(unittest.TestCase):
+    def test_auto_tune_always_closes_the_display(self):
+        tuner = AutoTuner.__new__(AutoTuner)
+        tuner._run_auto_tune = Mock(side_effect=RuntimeError("boom"))
+        tuner._close_display = Mock()
+
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            tuner.run_auto_tune()
+
+        tuner._close_display.assert_called_once_with()
+
     def test_docker_runtime_arguments_are_passed_to_the_container(self):
         tuner = AutoTuner.__new__(AutoTuner)
         tuner.config = {
@@ -115,30 +125,63 @@ class GuideLLMAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "result.json"
 
-            def fake_run(command, **_):
+            def fake_popen(command, **_):
                 output_index = command.index("--output") + 1
                 Path(json.loads(command[output_index])["path"]).write_text("{}")
+                return SimpleNamespace(stdout=iter(["GuideLLM benchmark started\n"]), wait=Mock(return_value=0))
 
             with (
-                patch("auto_tune.guidellm.subprocess.run", side_effect=fake_run) as run,
+                patch("auto_tune.guidellm.subprocess.Popen", side_effect=fake_popen) as popen,
                 patch("auto_tune.guidellm.extract_metrics", return_value={"throughput": 5.0}),
             ):
+                output = []
                 metrics = GuideLLMRunner().run(
                     target="http://localhost:8000",
                     data=[{"kind": "json_file", "path": "tools.jsonl", "tool_choice": {"type": "function"}}],
                     profile={"kind": "constant", "rate": 5},
                     constraints=[{"kind": "max_requests", "count": 10}],
                     output_path=output_path,
+                    on_output=output.append,
                 )
 
-            command = run.call_args.args[0]
+            command = popen.call_args.args[0]
             self.assertEqual(command[:2], ["guidellm", "run"])
             self.assertNotIn("--disable-console", command)
-            self.assertNotIn("capture_output", run.call_args.kwargs)
+            self.assertIn("--disable-console-interactive", command)
+            self.assertEqual(popen.call_args.kwargs["stdout"], -1)
+            self.assertEqual(popen.call_args.kwargs["stderr"], -2)
             constraint_values = [command[index + 1] for index, value in enumerate(command) if value == "--constraint"]
             self.assertEqual(constraint_values, ['{"kind":"max_requests","count":10}'])
             self.assertEqual(metrics["throughput"], 5.0)
             self.assertTrue(output_path.exists())
+            self.assertEqual(output, ["GuideLLM benchmark started\n"])
+
+    def test_runner_inherits_terminal_output_without_callback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "result.json"
+
+            def fake_run(command, **_):
+                output_index = command.index("--output") + 1
+                Path(json.loads(command[output_index])["path"]).write_text("{}")
+
+            with (
+                patch("auto_tune.guidellm.subprocess.run", side_effect=fake_run) as run,
+                patch("auto_tune.guidellm.subprocess.Popen") as popen,
+                patch("auto_tune.guidellm.extract_metrics", return_value={"throughput": 5.0}),
+            ):
+                metrics = GuideLLMRunner().run(
+                    target="http://localhost:8000",
+                    data=[{"kind": "synthetic_text", "prompt_tokens": 10, "output_tokens": 2}],
+                    profile={"kind": "throughput", "max_concurrency": 4},
+                    constraints=[{"kind": "max_requests", "count": 10}],
+                    output_path=output_path,
+                )
+
+            command = run.call_args.args[0]
+            self.assertNotIn("--disable-console-interactive", command)
+            self.assertEqual(run.call_args.kwargs, {"check": True})
+            popen.assert_not_called()
+            self.assertEqual(metrics["throughput"], 5.0)
 
 
 if __name__ == "__main__":
