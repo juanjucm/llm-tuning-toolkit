@@ -119,10 +119,10 @@ class AutoTuner:
         if display:
             display.set_status(status)
 
-    def _add_guidellm_output(self, line: str) -> None:
+    def _set_guidellm_progress(self, progress: str) -> None:
         display = getattr(self, "display", None)
         if display:
-            display.add_guidellm_output(line)
+            display.set_guidellm_progress(progress)
 
     def _close_display(self) -> None:
         """Stop the live view and detach its logger handler."""
@@ -347,6 +347,7 @@ class AutoTuner:
         Args:
             container (docker.models.containers.Container): Container to clean up.
         """
+        self._set_display_status("Stopping engine")
         try:
             self.logger.info(f"Stopping container...")
             container.stop(timeout=100)
@@ -392,7 +393,7 @@ class AutoTuner:
                 constraints=scenario["constraints"],
                 output_path=Path(output_file),
                 options=scenario.get("guidellm_options"),
-                on_output=self._add_guidellm_output if self.display else None,
+                on_output=self._set_guidellm_progress if self.display else None,
             )
         except GuideLLMError as e:
             self.logger.error(f"Throughput benchmark failed: {e}")
@@ -436,7 +437,7 @@ class AutoTuner:
                 constraints=scenario["rate_constraints"],
                 output_path=Path(output_file),
                 options=scenario.get("guidellm_options"),
-                on_output=self._add_guidellm_output if self.display else None,
+                on_output=self._set_guidellm_progress if self.display else None,
             )
         except GuideLLMError as e:
             self.logger.error(f"Rate benchmark failed: {e}")

@@ -277,10 +277,10 @@ options:
 ```
 
 By default, auto-tune uses a colored static terminal view showing sweep progress,
-the active parameter combination, the best valid throughput, recent events, and a
-rolling copy of GuideLLM's status and final CLI output. GuideLLM's nested interactive
-view is disabled in this mode so it does not conflict with the auto-tune display. Use
-`--no-ui` for CI logs, redirected output, or GuideLLM's native interactive terminal view.
+the active parameter combination, the best valid throughput, and GuideLLM's live
+benchmark progress. GuideLLM runs in a pseudo-terminal so its interactive progress can
+be embedded without including setup messages or final report tables. Use `--no-ui` for
+CI logs, redirected output, or GuideLLM's native standalone terminal view.
 
 ## Multi Benchmarking Usage
 

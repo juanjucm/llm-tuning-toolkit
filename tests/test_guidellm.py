@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
-from auto_tune.guidellm import GuideLLMRunner, extract_metrics
+from auto_tune.guidellm import GuideLLMRunner, _TerminalScreen, extract_metrics
 from auto_tune.tuner import AutoTuner
 
 
@@ -125,13 +125,14 @@ class GuideLLMAdapterTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output_path = Path(directory) / "result.json"
 
-            def fake_popen(command, **_):
+            def fake_live_run(command, on_output):
                 output_index = command.index("--output") + 1
                 Path(json.loads(command[output_index])["path"]).write_text("{}")
-                return SimpleNamespace(stdout=iter(["GuideLLM benchmark started\n"]), wait=Mock(return_value=0))
+                on_output("Benchmarks\nGenerating... 50%")
+                return 0
 
             with (
-                patch("auto_tune.guidellm.subprocess.Popen", side_effect=fake_popen) as popen,
+                patch.object(GuideLLMRunner, "_run_with_live_output", side_effect=fake_live_run) as live_run,
                 patch("auto_tune.guidellm.extract_metrics", return_value={"throughput": 5.0}),
             ):
                 output = []
@@ -144,17 +145,34 @@ class GuideLLMAdapterTests(unittest.TestCase):
                     on_output=output.append,
                 )
 
-            command = popen.call_args.args[0]
+            command = live_run.call_args.args[0]
             self.assertEqual(command[:2], ["guidellm", "run"])
             self.assertNotIn("--disable-console", command)
-            self.assertIn("--disable-console-interactive", command)
-            self.assertEqual(popen.call_args.kwargs["stdout"], -1)
-            self.assertEqual(popen.call_args.kwargs["stderr"], -2)
+            self.assertNotIn("--disable-console-interactive", command)
             constraint_values = [command[index + 1] for index, value in enumerate(command) if value == "--constraint"]
             self.assertEqual(constraint_values, ['{"kind":"max_requests","count":10}'])
             self.assertEqual(metrics["throughput"], 5.0)
             self.assertTrue(output_path.exists())
-            self.assertEqual(output, ["GuideLLM benchmark started\n"])
+            self.assertEqual(output, ["Benchmarks\nGenerating... 50%"])
+
+    def test_terminal_screen_extracts_only_live_benchmark_progress(self):
+        screen = _TerminalScreen(rows=12, columns=80)
+        screen.feed(
+            "static setup message\r\n"
+            "╭─ Benchmarks ───────────────────────────────────────────────────────────────╮\r\n"
+            "│ 10% concurrent  requests 10/100                                             │\r\n"
+            "╰──────────────────────────────────────────────────────────────────────────────╯\r\n"
+            "Generating... 10%"
+        )
+
+        progress = screen.benchmark_progress()
+        self.assertIsNotNone(progress)
+        self.assertIn("Benchmarks", progress)
+        self.assertIn("Generating... 10%", progress)
+        self.assertNotIn("static setup message", progress)
+
+        screen.feed("\r\x1b[2KGenerating... 50%")
+        self.assertIn("Generating... 50%", screen.benchmark_progress())
 
     def test_runner_inherits_terminal_output_without_callback(self):
         with tempfile.TemporaryDirectory() as directory:
