@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
@@ -13,6 +13,52 @@ from auto_tune.tuner import AutoTuner
 
 
 class GuideLLMAdapterTests(unittest.TestCase):
+    def test_docker_runtime_arguments_are_passed_to_the_container(self):
+        tuner = AutoTuner.__new__(AutoTuner)
+        tuner.config = {
+            "port": 8000,
+            "engine": {
+                "image": "vllm/vllm-openai-rocm:latest",
+                "docker": {
+                    "devices": ["/dev/kfd:/dev/kfd:rwm", "/dev/dri:/dev/dri:rwm"],
+                    "group_add": ["993"],
+                    "security_opt": ["seccomp=unconfined"],
+                    "environment": {"ROCR_VISIBLE_DEVICES": "0,1"},
+                },
+            },
+        }
+        tuner.hf_token = ""
+        tuner.cache_dir = "/tmp/cache"
+        tuner.logger = Mock()
+        tuner.docker_client = Mock()
+
+        tuner._launch_docker_engine(["--model", "example/model"])
+
+        kwargs = tuner.docker_client.containers.run.call_args.kwargs
+        self.assertEqual(kwargs["devices"], ["/dev/kfd:/dev/kfd:rwm", "/dev/dri:/dev/dri:rwm"])
+        self.assertEqual(kwargs["group_add"], ["993"])
+        self.assertEqual(kwargs["security_opt"], ["seccomp=unconfined"])
+        self.assertEqual(kwargs["environment"]["ROCR_VISIBLE_DEVICES"], "0,1")
+        self.assertEqual(kwargs["environment"]["HF_HUB_CACHE"], "/data/")
+        self.assertNotIn("device_requests", kwargs)
+
+    def test_existing_gpu_device_selection_is_preserved(self):
+        tuner = AutoTuner.__new__(AutoTuner)
+        tuner.config = {
+            "port": 8000,
+            "engine": {"image": "vllm/vllm-openai:latest", "devices": ["0"]},
+        }
+        tuner.hf_token = ""
+        tuner.cache_dir = "/tmp/cache"
+        tuner.logger = Mock()
+        tuner.docker_client = Mock()
+
+        tuner._launch_docker_engine([])
+
+        request = tuner.docker_client.containers.run.call_args.kwargs["device_requests"][0]
+        self.assertEqual(request["DeviceIDs"], ["0"])
+        self.assertEqual(request["Capabilities"], [["gpu"]])
+
     def test_load_profiles_map_to_their_guidellm_parameters(self):
         tuner = AutoTuner.__new__(AutoTuner)
         tuner.config = {"scenario": {"load": {"kind": "throughput", "max_concurrency": 12}}}

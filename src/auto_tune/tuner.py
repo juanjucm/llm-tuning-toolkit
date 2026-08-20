@@ -147,23 +147,33 @@ class AutoTuner:
             container_name = f"autotune_engine_{int(time.time())}"
             self.logger.info(f"Starting engine container: {container_name}")
 
-            devices = engine_config["devices"]
-            device_requests = [docker.types.DeviceRequest(device_ids=devices, capabilities=[["gpu"]])]
+            docker_config = engine_config.get("docker", {})
+            docker_args = {
+                key: value
+                for key, value in docker_config.items()
+                if key in {"devices", "group_add", "security_opt"}
+            }
+            if "devices" in engine_config:
+                docker_args["device_requests"] = [
+                    docker.types.DeviceRequest(device_ids=engine_config["devices"], capabilities=[["gpu"]])
+                ]
+            environment = {
+                "HF_TOKEN": self.hf_token,
+                "HF_HUB_CACHE": "/data/",
+                **docker_config.get("environment", {}),
+            }
 
             container = self.docker_client.containers.run(
                 image=engine_config["image"],
                 command=" ".join([str(a) for a in engine_args]),
                 shm_size="2g",
-                environment={
-                    "HF_TOKEN": self.hf_token, 
-                    "HF_HUB_CACHE": "/data/" # dir inside container where model cache is mounted.
-                    },
+                environment=environment,
                 volumes={self.cache_dir: {"bind": "/data/", "mode": "rw"}},
                 ports={f"{port}/tcp": port},
                 detach=True,
                 name=container_name,
-                device_requests=device_requests,
                 stop_signal="SIGTERM",
+                **docker_args,
             )
 
             return container
