@@ -16,12 +16,11 @@ scenario:
       output_tokens: 128
       output_tokens_min: 64
       output_tokens_max: 1024
-  constraints:
-    - kind: max_duration
-      seconds: 90
-  rate_constraints:
-    - kind: max_duration
-      seconds: 30
+  # Default stopping condition: every created request reaches a terminal outcome.
+  # Change these counts directly, or use constraints / rate_constraints with a
+  # max_duration descriptor when a fixed wall-clock test is required.
+  max_requests: 1000
+  rate_max_requests: 1000
   # Choose the load model that matches the production contract:
   #
   # `throughput`: GuideLLM drives the server

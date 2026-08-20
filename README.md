@@ -157,9 +157,11 @@ scenario:
 
 When throughput mode needs its SLO rate fallback, `rate_constraints` controls the
 fallback attempts. If `constraints` is explicitly set and `rate_constraints` is absent,
-the same constraints are used for both. Existing `throughput_duration_seconds` and
-`rate_duration_seconds` configurations remain supported and become the default duration
-constraints.
+the same constraints are used for both. If neither constraint list nor legacy duration
+setting is supplied, auto-tune defaults to `max_requests: 1000` for both runs. Set
+`max_requests` and `rate_max_requests` to change those defaults. Existing
+`throughput_duration_seconds` and `rate_duration_seconds` configurations remain
+supported as explicit legacy duration constraints.
 
 Do not pass `constraint` through `scenario.guidellm_options.arguments`: auto-tune rejects
 it to prevent conflicting stop conditions.

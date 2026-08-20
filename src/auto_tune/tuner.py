@@ -93,17 +93,36 @@ class AutoTuner:
         if not isinstance(scenario["data"], list) or not scenario["data"]:
             raise ValueError("scenario.data must be a non-empty list of GuideLLM data descriptors")
         scenario.setdefault("slos", scenario.pop("goodput_criteria", {}))
-        legacy_throughput_duration = scenario.setdefault("throughput_duration_seconds", 90)
-        legacy_rate_duration = scenario.setdefault("rate_duration_seconds", 30)
+        has_legacy_throughput_duration = "throughput_duration_seconds" in scenario
+        has_legacy_rate_duration = "rate_duration_seconds" in scenario
+        legacy_throughput_duration = scenario.get("throughput_duration_seconds", 90)
+        legacy_rate_duration = scenario.get("rate_duration_seconds", 30)
+        default_max_requests = scenario.setdefault("max_requests", 1000)
+        default_rate_max_requests = scenario.setdefault("rate_max_requests", default_max_requests)
         has_primary_constraints = "constraints" in scenario
         scenario["constraints"] = self._normalize_constraints(
-            scenario.get("constraints"), legacy_throughput_duration, "scenario.constraints"
+            scenario.get("constraints"),
+            legacy_throughput_duration,
+            "scenario.constraints",
+            default=(
+                [{"kind": "max_duration", "seconds": legacy_throughput_duration}]
+                if has_legacy_throughput_duration
+                else [{"kind": "max_requests", "count": default_max_requests}]
+            ),
         )
         scenario["rate_constraints"] = self._normalize_constraints(
             scenario.get("rate_constraints"),
             legacy_rate_duration,
             "scenario.rate_constraints",
-            default=deepcopy(scenario["constraints"]) if has_primary_constraints else None,
+            default=(
+                deepcopy(scenario["constraints"])
+                if has_primary_constraints
+                else (
+                    [{"kind": "max_duration", "seconds": legacy_rate_duration}]
+                    if has_legacy_rate_duration
+                    else [{"kind": "max_requests", "count": default_rate_max_requests}]
+                )
+            ),
         )
         scenario.setdefault("max_rate_finding_attempts", 3)
         scenario.setdefault("rate_decrease_factor", 0.3)
