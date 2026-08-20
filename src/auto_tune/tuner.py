@@ -153,6 +153,7 @@ class AutoTuner:
             container = self.docker_client.containers.run(
                 image=engine_config["image"],
                 command=" ".join([str(a) for a in engine_args]),
+                shm_size="2g",
                 environment={
                     "HF_TOKEN": self.hf_token, 
                     "HF_HUB_CACHE": "/data/" # dir inside container where model cache is mounted.
@@ -464,7 +465,7 @@ class AutoTuner:
                 if not container:
                     continue
 
-                if not self._wait_for_server_ready(container, self.config["port"]):
+                if not self._wait_for_server_ready(container, self.config["port"], self.config["engine"]["timeout"]):
                     self.logger.error("Server failed to start properly")
                     continue
 
