@@ -4,6 +4,14 @@ instance_info:
   gpu_type: Nvidia L40S
   gpu_count: 1
 
+# Optional benchmark metric tracking. With only `project`, Trackio stores data
+# locally. Set either `space_id` for Hugging Face Spaces or `server_url` for a
+# separately hosted Trackio server.
+# trackio:
+#   project: llm-tuning-toolkit
+#   # space_id: username/trackio
+#   # server_url: http://localhost:7860
+
 scenario:
   name: balanced-text
   # Every descriptor is passed unchanged to `guidellm run --data`.  Use JSON

@@ -18,6 +18,7 @@ import yaml
 from huggingface_hub import HfApi
 
 from auto_tune.guidellm import GuideLLMError, GuideLLMRunner
+from auto_tune.tracking import TrackioTracker
 
 coloredlogs.install()
 
@@ -69,6 +70,7 @@ class AutoTuner:
         # Docker client
         self.docker_client = docker.from_env()
         self.guidellm = GuideLLMRunner(self.config.get("guidellm", {}).get("command", "guidellm"))
+        self.tracker = TrackioTracker(self.config.get("trackio"), self.logger)
 
     def _load_config(self) -> Dict:
         """
@@ -148,6 +150,16 @@ class AutoTuner:
         arguments = scenario.get("guidellm_options", {}).get("arguments", {})
         if "constraint" in arguments or "constraints" in arguments:
             raise ValueError("Use scenario.constraints or scenario.rate_constraints, not guidellm_options.arguments.constraint")
+        trackio_config = config.get("trackio")
+        if trackio_config is not None:
+            if not isinstance(trackio_config, dict):
+                raise ValueError("trackio must be a mapping")
+            if (
+                trackio_config.get("enabled", True)
+                and trackio_config.get("space_id")
+                and trackio_config.get("server_url")
+            ):
+                raise ValueError("trackio.space_id and trackio.server_url cannot be used together")
         return config
 
     @staticmethod
@@ -430,6 +442,7 @@ class AutoTuner:
             self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
 
             goodput_checks, meets = self._meets_goodput_criteria(metrics)
+            self.tracker.log_metrics(metrics, slo_met=meets, target_rate=rate)
             self.logger.info("Goodput SLOs checks:")
             self.logger.info(json.dumps(goodput_checks, indent=2))
 
@@ -532,10 +545,28 @@ class AutoTuner:
                 if not container:
                     continue
 
-                if not self._wait_for_server_ready(container, self.config["port"], self.config["engine"]["timeout"]):
+                if not self._wait_for_server_ready(
+                    container,
+                    self.config["port"],
+                    self.config["engine"].get("timeout", 700),
+                ):
                     self.logger.error("Server failed to start properly")
                     continue
 
+                self.tracker.start_run(
+                    name=f"{engine_name}-{run_id}",
+                    group=self.config["scenario"]["name"],
+                    config={
+                        "model": self.config["model"],
+                        "scenario": self.config["scenario"]["name"],
+                        "load": self.config["scenario"]["load"],
+                        "engine": engine_name,
+                        "engine_image": self.config["engine"]["image"],
+                        "engine_args": engine_args,
+                        "parameters": param_config,
+                        "instance_info": self.config.get("instance_info", {}),
+                    },
+                )
                 metrics = self._run_throughput_benchmark(
                     run_id=run_id,
                     output_folder=engine_path.as_posix(),
@@ -548,6 +579,7 @@ class AutoTuner:
                 self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
 
                 goodput_checks, meets = self._meets_goodput_criteria(metrics)
+                self.tracker.log_metrics(metrics, slo_met=meets)
                 self.logger.info("Goodput SLOs checks:")
                 self.logger.info(json.dumps(goodput_checks, indent=2))
 
@@ -615,6 +647,7 @@ class AutoTuner:
             finally:
                 if container is not None:
                     self._cleanup_container(container)
+                self.tracker.finish_run()
 
         # Save all results
         results_file = engine_path / "auto_tune_results.json"

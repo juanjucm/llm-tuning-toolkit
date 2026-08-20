@@ -191,6 +191,48 @@ SLO names use `min_` or `max_` followed by a normalized metric, such as
 `min_output_tokens_per_second`. Results include raw GuideLLM JSON reports plus
 `auto_tune_results.json` with the selected deployment configuration.
 
+### Track benchmark metrics with Trackio
+
+Auto-tuning can optionally send its normalized benchmark metrics to
+[Trackio](https://github.com/gradio-app/trackio). Each engine-parameter
+combination is recorded as a separate Trackio run. The primary benchmark and
+any fixed-rate SLO fallback attempts are logged as successive steps in that run.
+
+For local storage, configure only a project name:
+
+```yaml
+trackio:
+  project: llm-tuning-toolkit
+```
+
+After the auto-tune run, open the local dashboard with:
+
+```bash
+trackio show --project llm-tuning-toolkit
+```
+
+To log to a Hugging Face Space, add `space_id`:
+
+```yaml
+trackio:
+  project: llm-tuning-toolkit
+  space_id: username/trackio
+```
+
+To log to a self-hosted Trackio server, use its write-access URL. The write
+token can be included in that URL or, preferably, supplied through the
+`TRACKIO_WRITE_TOKEN` environment variable:
+
+```yaml
+trackio:
+  project: llm-tuning-toolkit
+  server_url: http://trackio.example:7860
+```
+
+Start a local network-accessible server with `trackio show --host 0.0.0.0`.
+`space_id` and `server_url` are mutually exclusive. Set `enabled: false` to
+temporarily disable a configured integration.
+
 For tool calling, provide a GuideLLM dataset with tool-call messages and add the
 `tool_calling_message_extractor` data preprocessor through
 `scenario.guidellm_options.arguments`. Enable the matching vLLM tool parser in
