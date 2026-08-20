@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import unittest
 from pathlib import Path
@@ -52,6 +53,43 @@ class TrackioTrackerTests(unittest.TestCase):
         with patch("auto_tune.tracking.importlib.import_module") as import_module:
             tracker.start_run(name="unused", group="unused", config={})
         import_module.assert_not_called()
+
+    def test_hf_token_is_available_for_space_run_and_restored(self):
+        trackio = Mock()
+        observed_tokens = []
+        trackio.init.side_effect = lambda **_: observed_tokens.append(os.environ.get("HF_TOKEN"))
+        tracker = TrackioTracker(
+            {"project": "benchmarks", "space_id": "user/benchmarks"},
+            logging.getLogger(__name__),
+            hf_token="provided-token",
+        )
+
+        with (
+            patch.dict(os.environ, {"HF_TOKEN": "previous-token"}),
+            patch("auto_tune.tracking.importlib.import_module", return_value=trackio),
+        ):
+            tracker.start_run(name="vllm-abcd", group="balanced", config={})
+            self.assertEqual(os.environ["HF_TOKEN"], "provided-token")
+            tracker.finish_run()
+            self.assertEqual(os.environ["HF_TOKEN"], "previous-token")
+
+        self.assertEqual(observed_tokens, ["provided-token"])
+
+    def test_hf_token_is_restored_when_space_initialization_fails(self):
+        trackio = Mock()
+        trackio.init.side_effect = RuntimeError("unavailable")
+        tracker = TrackioTracker(
+            {"project": "benchmarks", "space_id": "user/benchmarks"},
+            logging.getLogger(__name__),
+            hf_token="provided-token",
+        )
+
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("auto_tune.tracking.importlib.import_module", return_value=trackio),
+        ):
+            tracker.start_run(name="vllm-abcd", group="balanced", config={})
+            self.assertNotIn("HF_TOKEN", os.environ)
 
 
 if __name__ == "__main__":

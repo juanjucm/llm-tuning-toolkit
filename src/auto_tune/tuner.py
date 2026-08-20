@@ -51,6 +51,10 @@ class AutoTuner:
         cache_dir: Optional[str] = None,
         hf_token: Optional[str] = None,
         display: Optional[AutoTuneDisplay] = None,
+        trackio_project: Optional[str] = None,
+        trackio_space_id: Optional[str] = None,
+        trackio_server_url: Optional[str] = None,
+        trackio_group: Optional[str] = None,
     ):
         self.config_path = config_path
         self.config = self._load_config()
@@ -95,7 +99,20 @@ class AutoTuner:
         # Docker client
         self.docker_client = docker.from_env()
         self.guidellm = GuideLLMRunner(self.config.get("guidellm", {}).get("command", "guidellm"))
-        self.tracker = TrackioTracker(self.config.get("trackio"), self.logger)
+        if trackio_space_id and trackio_server_url:
+            raise ValueError("trackio_space_id and trackio_server_url cannot be used together")
+        if not trackio_project and any((trackio_space_id, trackio_server_url, trackio_group)):
+            raise ValueError("trackio_project is required when other Trackio options are provided")
+        trackio_config = None
+        if trackio_project:
+            trackio_config = {"project": trackio_project}
+            if trackio_space_id:
+                trackio_config["space_id"] = trackio_space_id
+            if trackio_server_url:
+                trackio_config["server_url"] = trackio_server_url
+            if trackio_group:
+                trackio_config["group"] = trackio_group
+        self.tracker = TrackioTracker(trackio_config, self.logger, hf_token=self.hf_token)
 
     def _set_display_status(self, status: str) -> None:
         display = getattr(self, "display", None)
@@ -197,16 +214,8 @@ class AutoTuner:
         arguments = scenario.get("guidellm_options", {}).get("arguments", {})
         if "constraint" in arguments or "constraints" in arguments:
             raise ValueError("Use scenario.constraints or scenario.rate_constraints, not guidellm_options.arguments.constraint")
-        trackio_config = config.get("trackio")
-        if trackio_config is not None:
-            if not isinstance(trackio_config, dict):
-                raise ValueError("trackio must be a mapping")
-            if (
-                trackio_config.get("enabled", True)
-                and trackio_config.get("space_id")
-                and trackio_config.get("server_url")
-            ):
-                raise ValueError("trackio.space_id and trackio.server_url cannot be used together")
+        if "trackio" in config:
+            raise ValueError("Trackio is configured through the auto-tune CLI; remove 'trackio' from the YAML file")
         return config
 
     @staticmethod

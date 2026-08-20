@@ -197,12 +197,13 @@ Auto-tuning can optionally send its normalized benchmark metrics to
 [Trackio](https://github.com/gradio-app/trackio). Each engine-parameter
 combination is recorded as a separate Trackio run. The primary benchmark and
 any fixed-rate SLO fallback attempts are logged as successive steps in that run.
+Trackio options are supplied through the CLI, not the benchmark YAML.
 
-For local storage, configure only a project name:
+For local storage, provide only a project name:
 
-```yaml
-trackio:
-  project: llm-tuning-toolkit
+```bash
+uv run auto-tune --config examples/guidellm-auto-tune.yaml \
+  --trackio-project llm-tuning-toolkit
 ```
 
 After the auto-tune run, open the local dashboard with:
@@ -211,27 +212,31 @@ After the auto-tune run, open the local dashboard with:
 trackio show --project llm-tuning-toolkit
 ```
 
-To log to a Hugging Face Space, add `space_id`:
+To log to a Hugging Face Space, add its ID. `--hf-token` is forwarded to
+Trackio for Space authentication; it defaults to the `HF_TOKEN` environment
+variable:
 
-```yaml
-trackio:
-  project: llm-tuning-toolkit
-  space_id: username/trackio
+```bash
+uv run auto-tune --config examples/guidellm-auto-tune.yaml \
+  --trackio-project llm-tuning-toolkit \
+  --trackio-space-id username/trackio \
+  --hf-token "$HF_TOKEN"
 ```
 
 To log to a self-hosted Trackio server, use its write-access URL. The write
 token can be included in that URL or, preferably, supplied through the
 `TRACKIO_WRITE_TOKEN` environment variable:
 
-```yaml
-trackio:
-  project: llm-tuning-toolkit
-  server_url: http://trackio.example:7860
+```bash
+uv run auto-tune --config examples/guidellm-auto-tune.yaml \
+  --trackio-project llm-tuning-toolkit \
+  --trackio-server-url http://trackio.example:7860
 ```
 
 Start a local network-accessible server with `trackio show --host 0.0.0.0`.
-`space_id` and `server_url` are mutually exclusive. Set `enabled: false` to
-temporarily disable a configured integration.
+`--trackio-space-id` and `--trackio-server-url` are mutually exclusive. Omit
+`--trackio-project` to disable metric tracking. Use `--trackio-group` to
+override the scenario name used to group runs.
 
 For tool calling, provide a GuideLLM dataset with tool-call messages and add the
 `tool_calling_message_extractor` data preprocessor through
@@ -240,17 +245,35 @@ the engine's `base_args`. For vision/audio/video, pass GuideLLM multimodal data
 descriptors in the same `scenario.data` list.
 
 ```console
-usage: uv run auto-tune [-h] [--config <config.yaml>] [--result-dir <result_dir>] [--dataset-id <dataset_id>] [--hf-token <hf_token>] [--no-ui]
+usage: uv run auto-tune [-h] --config CONFIG [--result-dir RESULT_DIR]
+                        [--dataset-id DATASET_ID] [--cache-dir CACHE_DIR]
+                        [--hf-token HF_TOKEN] [--trackio-project TRACKIO_PROJECT]
+                        [--trackio-space-id TRACKIO_SPACE_ID |
+                         --trackio-server-url TRACKIO_SERVER_URL]
+                        [--trackio-group TRACKIO_GROUP]
+                        [--no-ui]
 
 Auto-tune tool for finding optimal engine parameters.
 
 options:
-  -h, --help    show this help message and exit
-  --config      Path to GuideLLM auto-tune configuration file
-  --result-dir (optional) Directory to save tuning results
-  --dataset-id (optional) Huggingface dataset where to dump results
-  --hf-token   (optional) Huggingface token to use for accesing models and dataset.
-  --no-ui      Disable the live terminal view and use normal log output instead.
+  -h, --help            show this help message and exit
+  --config CONFIG       Path to auto-tune configuration file
+  --result-dir RESULT_DIR
+                        Directory to save tuning results
+  --dataset-id DATASET_ID
+                        Hugging Face dataset where results are uploaded
+  --cache-dir CACHE_DIR
+                        Cache directory for Hugging Face models and datasets
+  --hf-token HF_TOKEN   Hugging Face token used for models, datasets, and Trackio Spaces
+  --trackio-project TRACKIO_PROJECT
+                        Trackio project name; enables metric tracking
+  --trackio-space-id TRACKIO_SPACE_ID
+                        Hugging Face Space used for Trackio metrics
+  --trackio-server-url TRACKIO_SERVER_URL
+                        Self-hosted Trackio server write-access URL
+  --trackio-group TRACKIO_GROUP
+                        Optional run group; defaults to the scenario name
+  --no-ui               Disable the live terminal view and use normal log output instead.
 ```
 
 By default, auto-tune uses a colored static terminal view showing sweep progress,

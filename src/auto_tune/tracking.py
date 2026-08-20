@@ -4,24 +4,51 @@ from __future__ import annotations
 
 import importlib
 import logging
+import os
 from typing import Any
 
 
 class TrackioTracker:
     """Manage one optional Trackio run at a time without affecting benchmarks."""
 
-    def __init__(self, config: dict[str, Any] | None, logger: logging.Logger) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any] | None,
+        logger: logging.Logger,
+        hf_token: str | None = None,
+    ) -> None:
         self.config = config or {}
         self.logger = logger
+        self.hf_token = hf_token
         self.enabled = config is not None and self.config.get("enabled", True)
         self._trackio: Any = None
         self._active = False
+        self._hf_token_overridden = False
+        self._previous_hf_token: str | None = None
+
+    def _set_hf_token(self) -> None:
+        if self._hf_token_overridden or not self.config.get("space_id") or not self.hf_token:
+            return
+        self._previous_hf_token = os.environ.get("HF_TOKEN")
+        self._hf_token_overridden = True
+        os.environ["HF_TOKEN"] = self.hf_token
+
+    def _restore_hf_token(self) -> None:
+        if not self._hf_token_overridden:
+            return
+        if self._previous_hf_token is None:
+            os.environ.pop("HF_TOKEN", None)
+        else:
+            os.environ["HF_TOKEN"] = self._previous_hf_token
+        self._hf_token_overridden = False
+        self._previous_hf_token = None
 
     def start_run(self, *, name: str, group: str, config: dict[str, Any]) -> None:
         if not self.enabled:
             return
 
         try:
+            self._set_hf_token()
             if self._trackio is None:
                 self._trackio = importlib.import_module("trackio")
 
@@ -41,6 +68,7 @@ class TrackioTracker:
             self._active = True
         except Exception as error:
             self._active = False
+            self._restore_hf_token()
             self.logger.warning("Could not start Trackio run: %s", error)
 
     def log_metrics(
@@ -74,3 +102,4 @@ class TrackioTracker:
             self.logger.warning("Could not finish Trackio run: %s", error)
         finally:
             self._active = False
+            self._restore_hf_token()
