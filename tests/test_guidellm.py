@@ -67,6 +67,15 @@ class GuideLLMAdapterTests(unittest.TestCase):
         tuner.config["scenario"]["load"] = {"kind": "concurrent", "streams": 12}
         self.assertEqual(tuner._primary_profile(), {"kind": "concurrent", "streams": 12})
 
+        tuner.config["scenario"]["load"] = {"kind": "constant", "rate": 8, "max_concurrency": 12}
+        self.assertEqual(tuner._primary_profile(), {"kind": "constant", "rate": 8, "max_concurrency": 12})
+
+        tuner.config["scenario"]["load"] = {"kind": "poisson", "rate": 8}
+        self.assertEqual(tuner._primary_profile(), {"kind": "poisson", "rate": 8})
+
+        tuner.config["scenario"]["load"] = {"kind": "replay", "time_scale": 0.5}
+        self.assertEqual(tuner._primary_profile(), {"kind": "replay", "time_scale": 0.5})
+
     def test_extract_metrics_uses_highest_throughput_strategy(self):
         def summary(mean, p99):
             return SimpleNamespace(
@@ -118,7 +127,7 @@ class GuideLLMAdapterTests(unittest.TestCase):
                     target="http://localhost:8000",
                     data=[{"kind": "json_file", "path": "tools.jsonl", "tool_choice": {"type": "function"}}],
                     profile={"kind": "constant", "rate": 5},
-                    duration_seconds=10,
+                    constraints=[{"kind": "max_requests", "count": 10}],
                     output_path=output_path,
                 )
 
@@ -126,6 +135,8 @@ class GuideLLMAdapterTests(unittest.TestCase):
             self.assertEqual(command[:2], ["guidellm", "run"])
             self.assertNotIn("--disable-console", command)
             self.assertNotIn("capture_output", run.call_args.kwargs)
+            constraint_values = [command[index + 1] for index, value in enumerate(command) if value == "--constraint"]
+            self.assertEqual(constraint_values, ['{"kind":"max_requests","count":10}'])
             self.assertEqual(metrics["throughput"], 5.0)
             self.assertTrue(output_path.exists())
 

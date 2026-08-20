@@ -103,7 +103,7 @@ class GuideLLMRunner:
         target: str,
         data: list[dict[str, Any] | str],
         profile: dict[str, Any],
-        duration_seconds: int | float,
+        constraints: list[dict[str, Any] | str],
         output_path: Path,
         backend: dict[str, Any] | str | None = None,
         options: dict[str, Any] | None = None,
@@ -118,13 +118,13 @@ class GuideLLMRunner:
             _descriptor(backend_config),
             "--profile",
             _descriptor(profile),
-            "--constraint",
-            _descriptor({"kind": "max_duration", "seconds": duration_seconds}),
             "--output",
             _descriptor({"kind": "json", "path": str(output_path)}),
             "--metrics",
             _descriptor({"kind": "generative", "sample_size": (options or {}).get("sample_size", 0)}),
         ]
+        for constraint in constraints:
+            cmd.extend(["--constraint", _descriptor(constraint)])
         for item in data:
             cmd.extend(["--data", _descriptor(item)])
         for option, value in (options or {}).get("arguments", {}).items():

@@ -40,10 +40,149 @@ data. The tuner runs GuideLLM's throughput profile for each engine sweep, then
 uses a constant-rate profile at progressively lower rates until every configured
 SLO is met.
 
-Set `scenario.load.kind` to `throughput` with `max_concurrency` for capacity
-search, or to `concurrent` with `streams` for a fixed number of continuously
-active users. Throughput mode uses the SLO-driven rate-reduction search;
-concurrent mode evaluates each engine configuration at the declared stream count.
+For data descriptor fields, preprocessors, and dataset formats, refer to the
+[GuideLLM datasets guide](https://github.com/vllm-project/guidellm/blob/main/docs/guides/datasets.md).
+Auto-tune owns the load profile, constraints, output location, and SLO retry policy.
+
+The supported `scenario.load.kind` values are `throughput`, `concurrent`,
+`constant`, `poisson`, and `replay`. Throughput mode uses the SLO-driven
+constant-rate fallback; all other modes evaluate the declared workload directly.
+
+### How to simulate your scenario
+
+Choose the traffic model separately from the condition that ends a benchmark.
+For example, a fixed request count is an end condition; it can be used with a
+concurrent-user, fixed-rate, or trace-replay workload.
+
+#### Capacity discovery: maximum demand up to a concurrency limit
+
+Use this to find the deployment configuration with the greatest completed
+throughput, while limiting the number of in-flight requests. It is a stress / capacity
+test, not a model of a fixed user population: GuideLLM continually issues work as fast
+as possible until it reaches `max_concurrency`.
+
+```yaml
+scenario:
+  load:
+    kind: throughput
+    max_concurrency: 512
+```
+
+This is the default auto-tuning strategy and enables the SLO-driven rate fallback.
+
+#### Fixed active users: closed-loop traffic
+
+Use this when the scenario defines a known number of active clients. Each stream sends
+its next request after the prior one completes, so `streams` represents continuously
+active clients rather than requests per second.
+
+```yaml
+scenario:
+  load:
+    kind: concurrent
+    streams: 512
+```
+
+Without a delay this models automated clients that immediately send another request.
+For interactive chat or agent sessions, use multi-turn data and synthetic `delay`
+(think time) between turns:
+
+```yaml
+scenario:
+  data:
+    - kind: synthetic_text
+      prompt_tokens: 1024
+      output_tokens: 256
+      turns: 3
+      delay: 5
+      delay_min: 2
+      delay_max: 12
+  load:
+    kind: concurrent
+    streams: 512
+```
+
+#### Open-arrival traffic: independent requests
+
+For traffic where clients arrive independently, use `constant` or `poisson`.
+`constant` sends an even request rate; `poisson` introduces natural variation around
+an average rate and is usually the closer production model. A useful first estimate is
+`arrival_rate ≈ active_users / (mean_response_time + mean_think_time)`.
+
+```yaml
+scenario:
+  load:
+    kind: poisson             # or constant
+    rate: 64                  # requests per second
+    max_concurrency: 512      # optional safety cap
+```
+
+#### Replay real traffic
+
+When production traces are available, GuideLLM's `replay` profile can reproduce their
+timestamped arrivals. This is the most faithful workload model.
+
+```yaml
+scenario:
+  data:
+    - kind: trace_synthetic
+      path: /absolute/path/traffic.jsonl
+  load:
+    kind: replay
+    time_scale: 1.0
+```
+
+#### Ending a benchmark cleanly
+
+`scenario.constraints` maps directly to repeated GuideLLM `--constraint` descriptors.
+Use one primary completion boundary. `max_duration` gives a fixed wall-clock test but
+cancels in-flight work at the deadline; `max_requests` gives a fixed request-count test
+and lets created requests reach a terminal state.
+
+```yaml
+scenario:
+  # Capacity discovery for 60 seconds.
+  constraints:
+    - kind: max_duration
+      seconds: 60
+```
+
+```yaml
+scenario:
+  # Fixed-user or fixed-rate test: 10,000 created requests reach a terminal outcome.
+  constraints:
+    - kind: max_requests
+      count: 10000
+```
+
+When throughput mode needs its SLO rate fallback, `rate_constraints` controls the
+fallback attempts. If `constraints` is explicitly set and `rate_constraints` is absent,
+the same constraints are used for both. Existing `throughput_duration_seconds` and
+`rate_duration_seconds` configurations remain supported and become the default duration
+constraints.
+
+Do not pass `constraint` through `scenario.guidellm_options.arguments`: auto-tune rejects
+it to prevent conflicting stop conditions.
+
+GuideLLM also provides `max_errors`, `max_error_rate`, `max_global_error_rate`, and
+`over_saturation` constraints. They are useful safety / early-exit conditions alongside a
+primary duration or request-count boundary. For example:
+
+```yaml
+scenario:
+  constraints:
+    - kind: max_requests
+      count: 10000
+    - kind: max_error_rate
+      rate: 0.02
+    - kind: over_saturation
+      mode: enforce
+      min_seconds: 30
+```
+
+When using duration-based tests, keep `errored` and `incomplete` request rates separate:
+an error is a terminal backend/request failure, while an incomplete request can be a
+benchmark cut-off cancellation.
 
 SLO names use `min_` or `max_` followed by a normalized metric, such as
 `min_success_rate`, `max_ttft_p99_ms`, `max_e2e_p99_ms`, or

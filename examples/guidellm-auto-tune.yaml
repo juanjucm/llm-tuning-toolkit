@@ -16,9 +16,12 @@ scenario:
       output_tokens: 128
       output_tokens_min: 64
       output_tokens_max: 1024
-      samples: 2000
-  throughput_duration_seconds: 90
-  rate_duration_seconds: 30
+  constraints:
+    - kind: max_duration
+      seconds: 90
+  rate_constraints:
+    - kind: max_duration
+      seconds: 30
   # Choose the load model that matches the production contract:
   #
   # `throughput`: GuideLLM drives the server

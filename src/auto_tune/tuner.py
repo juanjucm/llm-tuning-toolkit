@@ -5,6 +5,7 @@ import shutil
 import tempfile
 import time
 import uuid
+from copy import deepcopy
 from datetime import datetime
 from itertools import product
 from pathlib import Path
@@ -92,8 +93,18 @@ class AutoTuner:
         if not isinstance(scenario["data"], list) or not scenario["data"]:
             raise ValueError("scenario.data must be a non-empty list of GuideLLM data descriptors")
         scenario.setdefault("slos", scenario.pop("goodput_criteria", {}))
-        scenario.setdefault("throughput_duration_seconds", 90)
-        scenario.setdefault("rate_duration_seconds", 30)
+        legacy_throughput_duration = scenario.setdefault("throughput_duration_seconds", 90)
+        legacy_rate_duration = scenario.setdefault("rate_duration_seconds", 30)
+        has_primary_constraints = "constraints" in scenario
+        scenario["constraints"] = self._normalize_constraints(
+            scenario.get("constraints"), legacy_throughput_duration, "scenario.constraints"
+        )
+        scenario["rate_constraints"] = self._normalize_constraints(
+            scenario.get("rate_constraints"),
+            legacy_rate_duration,
+            "scenario.rate_constraints",
+            default=deepcopy(scenario["constraints"]) if has_primary_constraints else None,
+        )
         scenario.setdefault("max_rate_finding_attempts", 3)
         scenario.setdefault("rate_decrease_factor", 0.3)
         # `max_vus` was the former inference-benchmarker name. Keep configs
@@ -106,9 +117,38 @@ class AutoTuner:
             load.setdefault("max_concurrency", scenario.get("max_vus", 128))
         elif load["kind"] == "concurrent":
             load.setdefault("streams", scenario.get("max_vus", 128))
+        elif load["kind"] in {"constant", "poisson"}:
+            if "rate" not in load:
+                raise ValueError(f"scenario.load.rate is required for {load['kind']} workloads")
+        elif load["kind"] == "replay":
+            load.setdefault("time_scale", 1.0)
         else:
-            raise ValueError("scenario.load.kind must be 'throughput' or 'concurrent'")
+            raise ValueError(
+                "scenario.load.kind must be 'throughput', 'concurrent', 'constant', 'poisson', or 'replay'"
+            )
+        arguments = scenario.get("guidellm_options", {}).get("arguments", {})
+        if "constraint" in arguments or "constraints" in arguments:
+            raise ValueError("Use scenario.constraints or scenario.rate_constraints, not guidellm_options.arguments.constraint")
         return config
+
+    @staticmethod
+    def _normalize_constraints(
+        value: object,
+        legacy_duration: int | float,
+        name: str,
+        *,
+        default: list[Dict] | None = None,
+    ) -> list[Dict | str]:
+        """Normalize GuideLLM constraint descriptors and preserve old duration settings."""
+        if value is None:
+            value = default if default is not None else [{"kind": "max_duration", "seconds": legacy_duration}]
+        if isinstance(value, (dict, str)):
+            value = [value]
+        if not isinstance(value, list) or not value:
+            raise ValueError(f"{name} must be a non-empty GuideLLM constraint list")
+        if not all(isinstance(item, (dict, str)) for item in value):
+            raise ValueError(f"{name} items must be GuideLLM constraint mappings or descriptors")
+        return value
 
     def _build_engine_args(self, param_config: Dict) -> List[str]:
         """
@@ -247,11 +287,11 @@ class AutoTuner:
         Returns:
             Optional[Dict]: Parsed benchmark results or None if failed.
         """
-        self.logger.info("Running throughput benchmark...")
+        self.logger.info("Running %s benchmark...", self.config["scenario"]["load"]["kind"])
 
         scenario = self.config["scenario"]
         port = self.config["port"]
-        output_file = os.path.join(output_folder, f"throughput_{run_id}.json")
+        output_file = os.path.join(output_folder, f"{scenario['load']['kind']}_{run_id}.json")
 
         try:
             return self.guidellm.run(
@@ -259,7 +299,7 @@ class AutoTuner:
                 backend=scenario.get("backend"),
                 data=scenario["data"],
                 profile=self._primary_profile(),
-                duration_seconds=scenario["throughput_duration_seconds"],
+                constraints=scenario["constraints"],
                 output_path=Path(output_file),
                 options=scenario.get("guidellm_options"),
             )
@@ -270,9 +310,7 @@ class AutoTuner:
     def _primary_profile(self) -> Dict:
         """Build the GuideLLM profile for the scenario's production load model."""
         load = self.config["scenario"]["load"]
-        if load["kind"] == "throughput":
-            return {"kind": "throughput", "max_concurrency": load["max_concurrency"]}
-        return {"kind": "concurrent", "streams": load["streams"]}
+        return dict(load)
 
     def _run_rate_benchmark(
         self, rate: float, run_id: str, output_folder: str, engine_config: str
@@ -303,7 +341,7 @@ class AutoTuner:
                     "rate": rate,
                     "max_concurrency": scenario["load"]["max_concurrency"],
                 },
-                duration_seconds=scenario["rate_duration_seconds"],
+                constraints=scenario["rate_constraints"],
                 output_path=Path(output_file),
                 options=scenario.get("guidellm_options"),
             )
@@ -519,10 +557,8 @@ class AutoTuner:
                         self.logger.info(f"{'=' * 60}")
                         continue
                 elif not meets:
-                    self.logger.info(
-                        "SLOs are not met at the configured concurrent stream count; "
-                        "skipping this configuration."
-                    )
+                    self.logger.info("SLOs are not met for the configured %s workload; skipping this configuration.",
+                                     self.config["scenario"]["load"]["kind"])
                     continue
 
                 self.logger.info(
