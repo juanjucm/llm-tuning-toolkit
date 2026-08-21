@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import shutil
-import tempfile
 import time
 import uuid
 from copy import deepcopy
@@ -55,15 +54,12 @@ class AutoTuner:
         trackio_space_id: Optional[str] = None,
         trackio_server_url: Optional[str] = None,
         trackio_group: Optional[str] = None,
+        quiet: bool = False,
     ):
         self.config_path = config_path
         self.config = self._load_config()
 
-        if not result_dir:
-            self._temp_dir = tempfile.TemporaryDirectory()
-            self.root_dir = Path(self._temp_dir.name)
-        else:
-            self.root_dir = Path(result_dir)
+        self.root_dir = Path(result_dir or "out")
 
         # Create folder structure for results
         self.results_dir = self.root_dir.joinpath(
@@ -77,8 +73,9 @@ class AutoTuner:
 
         self.dataset_id = dataset_id
         self.hf_token = hf_token or HF_TOKEN
-        self.cache_dir = cache_dir
+        self.cache_dir = cache_dir or str(Path.home() / ".cache" / "huggingface" / "hub")
         self.display = display
+        self.quiet = quiet and display is None
 
         self.best_throughput = {
             "run_index": None,
@@ -90,10 +87,14 @@ class AutoTuner:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         self.logger = logging.getLogger(f"{__name__}.AutoTuner.{id(self)}")
         self.logger.setLevel(logging.INFO)
-        self._display_log_handler: Optional[_DisplayLogHandler] = None
+        self._owned_log_handler: Optional[logging.Handler] = None
         if self.display:
-            self._display_log_handler = _DisplayLogHandler(self.display)
-            self.logger.addHandler(self._display_log_handler)
+            self._owned_log_handler = _DisplayLogHandler(self.display)
+            self.logger.addHandler(self._owned_log_handler)
+            self.logger.propagate = False
+        elif self.quiet:
+            self._owned_log_handler = logging.NullHandler()
+            self.logger.addHandler(self._owned_log_handler)
             self.logger.propagate = False
 
         # Docker client
@@ -130,10 +131,10 @@ class AutoTuner:
             if self.display:
                 self.display.stop()
         finally:
-            if self._display_log_handler:
-                self.logger.removeHandler(self._display_log_handler)
-                self._display_log_handler.close()
-                self._display_log_handler = None
+            if self._owned_log_handler:
+                self.logger.removeHandler(self._owned_log_handler)
+                self._owned_log_handler.close()
+                self._owned_log_handler = None
                 self.logger.propagate = True
 
     def _load_config(self) -> Dict:
@@ -143,12 +144,17 @@ class AutoTuner:
         with open(self.config_path, "r") as f:
             config = yaml.safe_load(f)
 
+        if not isinstance(config, dict):
+            raise ValueError("The configuration file must contain a YAML mapping")
+
         required_keys = ["scenario", "engine", "model", "port", "instance_info"]
         for key in required_keys:
             if key not in config:
                 raise ValueError(f"Missing required config key: {key}")
 
         scenario = config["scenario"]
+        if not isinstance(scenario, dict):
+            raise ValueError("scenario must be a mapping")
         if "data" not in scenario:
             # The old prompt/decode descriptors were specific to inference-benchmarker.
             # Failing explicitly prevents a silent benchmark with a different workload.
@@ -271,7 +277,7 @@ class AutoTuner:
             engine_config = self.config["engine"]
             port = self.config["port"]
 
-            container_name = f"autotune_engine_{int(time.time())}"
+            container_name = f"autotune_engine_{uuid.uuid4().hex[:8]}"
             self.logger.info(f"Starting engine container: {container_name}")
 
             docker_config = engine_config.get("docker", {})
@@ -341,39 +347,27 @@ class AutoTuner:
         self.logger.error("Timeout waiting for engine to be ready")
         return False
 
-    def _cleanup_container(self, container: docker.models.containers.Container):
-        """
-        Clean up Docker container
-        Args:
-            container (docker.models.containers.Container): Container to clean up.
-        """
+    def _cleanup_container(self, container: docker.models.containers.Container) -> None:
+        """Stop and remove an engine container without blocking the remaining sweep."""
         self._set_display_status("Stopping engine")
         try:
-            self.logger.info(f"Stopping container...")
+            self.logger.info("Stopping container...")
             container.stop(timeout=100)
-        except Exception as e:
-            self.logger.warning(f"Error stopping container, forcing removal.")
+        except Exception as error:
+            self.logger.warning("Error stopping container; forcing removal: %s", error)
 
-        self.logger.info(f"Waiting for container to exit...")
         try:
-            container.reload()
-        except Exception as e:
-            self.logger.warning(f"Error reloading container status: {e}")
-        while container.status != "exited":
-            time.sleep(1)
-            container.reload()
-            self.logger.info(f"Container status: {container.status}")
+            self.logger.info("Removing container...")
+            container.remove(force=True)
+        except Exception as error:
+            self.logger.warning("Error removing container: %s", error)
 
-        self.logger.info(f"Removing container...")
-        container.remove(force=True)
-
-    def _run_throughput_benchmark(self, run_id: str, output_folder: str, engine_config: str) -> Optional[Dict]:
+    def _run_throughput_benchmark(self, run_id: str, output_folder: str) -> Optional[Dict]:
         """Run throughput benchmark to discover maximum throughput
 
         Args:
             run_id (str): Unique identifier for this benchmark run. Will be used for results file naming.
             output_folder (str): Directory to save benchmark results.
-            engine_config (str): Current docker engine command.
         Returns:
             Optional[Dict]: Parsed benchmark results or None if failed.
         """
@@ -394,6 +388,7 @@ class AutoTuner:
                 output_path=Path(output_file),
                 options=scenario.get("guidellm_options"),
                 on_output=self._set_guidellm_progress if self.display else None,
+                show_console=not self.quiet,
             )
         except GuideLLMError as e:
             self.logger.error(f"Throughput benchmark failed: {e}")
@@ -404,16 +399,13 @@ class AutoTuner:
         load = self.config["scenario"]["load"]
         return dict(load)
 
-    def _run_rate_benchmark(
-        self, rate: float, run_id: str, output_folder: str, engine_config: str
-    ) -> Optional[Dict]:
+    def _run_rate_benchmark(self, rate: float, run_id: str, output_folder: str) -> Optional[Dict]:
         """
         Run rate benchmark with specific request rate.
         Args:
             rate (float): Request rate in requests per second.
             run_id (str): Unique identifier for this benchmark run. Will be used for results file
             output_folder (str): Directory to save benchmark results.
-            engine_config (str): Current docker engine command.
         Returns:
             Optional[Dict]: Parsed benchmark results or None if failed.
         """
@@ -438,6 +430,7 @@ class AutoTuner:
                 output_path=Path(output_file),
                 options=scenario.get("guidellm_options"),
                 on_output=self._set_guidellm_progress if self.display else None,
+                show_console=not self.quiet,
             )
         except GuideLLMError as e:
             self.logger.error(f"Rate benchmark failed: {e}")
@@ -474,15 +467,14 @@ class AutoTuner:
         return results, meets
 
     def _find_optimal_rate(
-        self, max_throughput: float, run_id: str, output_folder: str, engine_config: Dict
-    ) -> Tuple[Dict, List[Dict]]:
+        self, max_throughput: float, run_id: str, output_folder: str
+    ) -> Tuple[Optional[Dict], Optional[List[Dict]]]:
         """
         Find optimal rate that meets goodput criteria.
         Args:
             max_throughput (float): Maximum throughput from throughput benchmark.
             run_id (str): Unique identifier for this benchmark run. Will be used for results file
             output_folder (str): Directory to save benchmark results.
-            engine_config (str): Current docker engine command.
         Returns:
             Tuple[Dict, List[Dict]]: Metrics at optimal rate and goodput checks, or (None, None) if not found.
         """
@@ -493,9 +485,7 @@ class AutoTuner:
             # Sleep between rate tests to let any pending requests clear
             time.sleep(3)
 
-            metrics = self._run_rate_benchmark(
-                rate=rate, run_id=run_id, output_folder=output_folder, engine_config=engine_config
-            )
+            metrics = self._run_rate_benchmark(rate=rate, run_id=run_id, output_folder=output_folder)
 
             if not metrics:
                 self.logger.warning("Rate benchmark did not produce metrics; trying a lower rate.")
@@ -585,7 +575,7 @@ class AutoTuner:
         Run the auto-tuning process.
         """
         # TODO: implement verbose/normal logging levels.
-        self.logger.info(f"Starting auto-tune process...")
+        self.logger.info("Starting auto-tune process...")
 
         # TODO: extend to support multiple engine auto-tuning.
         engine_name = self.config["engine"]["name"]
@@ -649,7 +639,6 @@ class AutoTuner:
                 metrics = self._run_throughput_benchmark(
                     run_id=run_id,
                     output_folder=engine_path.as_posix(),
-                    engine_config=" ".join([str(a) for a in engine_args]),
                 )
                 if not metrics:
                     self.logger.error("Failed to run throughput benchmark, continuing to next config...")
@@ -678,7 +667,6 @@ class AutoTuner:
                         metrics["throughput"],
                         run_id=run_id,
                         output_folder=engine_path.as_posix(),
-                        engine_config=" ".join([str(a) for a in engine_args]),
                     )
                     if not metrics:
                         self.logger.info(
@@ -687,8 +675,10 @@ class AutoTuner:
                         self.logger.info(f"{'=' * 60}")
                         continue
                 elif not meets:
-                    self.logger.info("SLOs are not met for the configured %s workload; skipping this configuration.",
-                                     self.config["scenario"]["load"]["kind"])
+                    self.logger.info(
+                        "SLOs are not met for the configured %s workload; skipping this configuration.",
+                        self.config["scenario"]["load"]["kind"],
+                    )
                     continue
 
                 self.logger.info(
@@ -733,20 +723,17 @@ class AutoTuner:
 
         # Save all results
         results_file = engine_path / "auto_tune_results.json"
+        result_summary = {
+            "timestamp": self.timestamp,
+            "config_file": self.config_path,
+            "engine_name": engine_name,
+            "instance_info": self.config.get("instance_info", {}),
+            "slos": self.config["scenario"]["slos"],
+            "scenario": self.config["scenario"],
+            "all_results": all_results,
+        }
         with open(results_file, "w") as f:
-            json.dump(
-                {
-                    "timestamp": self.timestamp,
-                    "config_file": self.config_path,
-                    "engine_name": engine_name,
-                    "instance_info": self.config.get("instance_info", {}),
-                    "slos": self.config["scenario"]["slos"],
-                    "scenario": self.config["scenario"],
-                    "all_results": all_results,
-                },
-                f,
-                indent=2,
-            )
+            json.dump(result_summary, f, indent=2)
 
         # Upload folder to Huggingface dataset if dataset_id is provided
         if self.dataset_id:
@@ -765,3 +752,4 @@ class AutoTuner:
         self.logger.info(f"Tested {len(param_combinations)} parameter combinations.")
         self.logger.info(f"Results saved to: {results_file}")
         self._set_display_status("Complete")
+        return result_summary

@@ -244,75 +244,22 @@ For tool calling, provide a GuideLLM dataset with tool-call messages and add the
 the engine's `base_args`. For vision/audio/video, pass GuideLLM multimodal data
 descriptors in the same `scenario.data` list.
 
-```console
-usage: uv run auto-tune [-h] --config CONFIG [--result-dir RESULT_DIR]
-                        [--dataset-id DATASET_ID] [--cache-dir CACHE_DIR]
-                        [--hf-token HF_TOKEN] [--trackio-project TRACKIO_PROJECT]
-                        [--trackio-space-id TRACKIO_SPACE_ID |
-                         --trackio-server-url TRACKIO_SERVER_URL]
-                        [--trackio-group TRACKIO_GROUP]
-                        [--no-ui]
+The Typer-based CLI validates configuration paths and exposes its full option
+reference through built-in help:
 
-Auto-tune tool for finding optimal engine parameters.
-
-options:
-  -h, --help            show this help message and exit
-  --config CONFIG       Path to auto-tune configuration file
-  --result-dir RESULT_DIR
-                        Directory to save tuning results
-  --dataset-id DATASET_ID
-                        Hugging Face dataset where results are uploaded
-  --cache-dir CACHE_DIR
-                        Cache directory for Hugging Face models and datasets
-  --hf-token HF_TOKEN   Hugging Face token used for models, datasets, and Trackio Spaces
-  --trackio-project TRACKIO_PROJECT
-                        Trackio project name; enables metric tracking
-  --trackio-space-id TRACKIO_SPACE_ID
-                        Hugging Face Space used for Trackio metrics
-  --trackio-server-url TRACKIO_SERVER_URL
-                        Self-hosted Trackio server write-access URL
-  --trackio-group TRACKIO_GROUP
-                        Optional run group; defaults to the scenario name
-  --no-ui               Disable the live terminal view and use normal log output instead.
+```bash
+uv run auto-tune --help
+uv run auto-tune --config examples/guidellm-auto-tune.yaml
 ```
+
+The main options are `--result-dir`, `--dataset-id`, `--cache-dir`,
+`--hf-token`, `--no-ui`, and the `--trackio-*` options described above.
+`--hf-token` also reads `HF_TOKEN` when it is not supplied explicitly.
+Results are stored under `out/` unless `--result-dir` specifies another path.
 
 By default, auto-tune uses a colored static terminal view showing sweep progress,
 the active parameter combination, the best valid throughput, and GuideLLM's live
 benchmark progress. GuideLLM runs in a pseudo-terminal so its interactive progress can
 be embedded without including setup messages or final report tables. Use `--no-ui` for
-CI logs, redirected output, or GuideLLM's native standalone terminal view.
-
-## Multi Benchmarking Usage
-
-This tool allows for easily define and launch benchmarking scenarios for a set of defined LLM runtimes with specified parameters.
-
-For running the script, make sure to provide a valid config yaml. Take a loot at `bench_config.yaml` to check the format and expected parameters.
-
-```console
-usage: uv run multi-benchmarker [-h] [--config CONFIG] [--scenarios SCENARIOS] [--engines ENGINES] [--show-logs] [--save-dir SAVE_DIR]
-
-Launch benchmarks based on a configuration file
-
-options:
-  -h, --help            show this help message and exit
-  --config CONFIG       Path to benchmark configuration file
-  --scenarios SCENARIOS
-                        Specific scenarios to run, comma separated (i.e: "s1,s2,s3") (if not specified, runs all scenarios)
-  --engines ENGINES     Specific engines to test, comma separated (i.e: "e1,e2,e3") (if not specified, tests all engines)
-  --save-dir SAVE_DIR   Directory to save benchmark results
-  --show-logs           Show engine container logs.
-```
-
-## Dashboard Usage
-
-This tool launches a dashboard for visualizing benchmarking results.
-
-```console
-Usage: dashboard [OPTIONS]
-
-Options:
-  --from-results-dir TEXT  Load inference-benchmarker results from a directory
-  --datasource TEXT        Load a Parquet file already generated
-  --port INTEGER           Port to run the dashboard
-  --help                   Show this message and exit.
-```
+a silent run: it disables the live display, fallback auto-tune logs, and GuideLLM's
+native console output.

@@ -1,5 +1,6 @@
 import io
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -12,7 +13,9 @@ from rich.console import Console
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from auto_tune.display import AutoTuneDisplay
-from auto_tune.guidellm import GuideLLMRunner, _TerminalScreen, extract_metrics
+from auto_tune.display_format import format_workload
+from auto_tune.guidellm import GuideLLMRunner, extract_metrics
+from auto_tune.terminal import TerminalScreen
 from auto_tune.tuner import AutoTuner
 
 
@@ -92,7 +95,7 @@ class GuideLLMAdapterTests(unittest.TestCase):
         }
         for expected, load in cases.items():
             with self.subTest(load=load):
-                self.assertEqual(AutoTuneDisplay._format_workload(load), expected)
+                self.assertEqual(format_workload(load), expected)
 
     def test_auto_tune_always_closes_the_display(self):
         tuner = AutoTuner.__new__(AutoTuner)
@@ -103,6 +106,37 @@ class GuideLLMAdapterTests(unittest.TestCase):
             tuner.run_auto_tune()
 
         tuner._close_display.assert_called_once_with()
+
+    def test_rate_finding_uses_every_configured_attempt(self):
+        tuner = AutoTuner.__new__(AutoTuner)
+        tuner.config = {
+            "scenario": {
+                "max_rate_finding_attempts": 3,
+                "rate_decrease_factor": 0.25,
+                "slos": {"min_success_rate": 0.99},
+            }
+        }
+        tuner.logger = Mock()
+        tuner.tracker = Mock()
+        tuner._run_rate_benchmark = Mock(return_value={"throughput": 10.0, "success_rate": 0.5})
+
+        with patch("auto_tune.tuner.time.sleep"):
+            metrics, checks = tuner._find_optimal_rate(10.0, "run", "results")
+
+        self.assertIsNone(metrics)
+        self.assertIsNone(checks)
+        self.assertEqual(tuner._run_rate_benchmark.call_count, 3)
+
+    def test_container_cleanup_forces_removal_when_stop_fails(self):
+        tuner = AutoTuner.__new__(AutoTuner)
+        tuner.logger = Mock()
+        tuner.display = None
+        container = Mock()
+        container.stop.side_effect = RuntimeError("stop failed")
+
+        tuner._cleanup_container(container)
+
+        container.remove.assert_called_once_with(force=True)
 
     def test_docker_runtime_arguments_are_passed_to_the_container(self):
         tuner = AutoTuner.__new__(AutoTuner)
@@ -237,7 +271,7 @@ class GuideLLMAdapterTests(unittest.TestCase):
             self.assertEqual(output, ["Benchmarks\nGenerating... 50%"])
 
     def test_terminal_screen_extracts_only_live_benchmark_progress(self):
-        screen = _TerminalScreen(rows=12, columns=80)
+        screen = TerminalScreen(rows=12, columns=80)
         screen.feed(
             "static setup message\r\n"
             "╭─ Benchmarks ───────────────────────────────────────────────────────────────╮\r\n"
@@ -246,14 +280,14 @@ class GuideLLMAdapterTests(unittest.TestCase):
             "Generating... 10%"
         )
 
-        progress = screen.benchmark_progress()
+        progress = screen.extract_block("Benchmarks", "Generating...")
         self.assertIsNotNone(progress)
         self.assertIn("Benchmarks", progress)
         self.assertIn("Generating... 10%", progress)
         self.assertNotIn("static setup message", progress)
 
         screen.feed("\r\x1b[2KGenerating... 50%")
-        self.assertIn("Generating... 50%", screen.benchmark_progress())
+        self.assertIn("Generating... 50%", screen.extract_block("Benchmarks", "Generating..."))
 
     def test_runner_inherits_terminal_output_without_callback(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -281,6 +315,35 @@ class GuideLLMAdapterTests(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs, {"check": True})
             popen.assert_not_called()
             self.assertEqual(metrics["throughput"], 5.0)
+
+    def test_runner_suppresses_all_console_output_when_disabled(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output_path = Path(directory) / "result.json"
+
+            def fake_run(command, **_):
+                output_index = command.index("--output") + 1
+                Path(json.loads(command[output_index])["path"]).write_text("{}")
+
+            with (
+                patch("auto_tune.guidellm.subprocess.run", side_effect=fake_run) as run,
+                patch("auto_tune.guidellm.extract_metrics", return_value={"throughput": 5.0}),
+            ):
+                GuideLLMRunner().run(
+                    target="http://localhost:8000",
+                    data=[{"kind": "synthetic_text", "prompt_tokens": 10, "output_tokens": 2}],
+                    profile={"kind": "throughput", "max_concurrency": 4},
+                    constraints=[{"kind": "max_requests", "count": 10}],
+                    output_path=output_path,
+                    show_console=False,
+                )
+
+            command = run.call_args.args[0]
+            self.assertIn("--disable-console", command)
+            self.assertIn("--disable-console-interactive", command)
+            self.assertEqual(
+                run.call_args.kwargs,
+                {"check": True, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL},
+            )
 
 
 if __name__ == "__main__":
