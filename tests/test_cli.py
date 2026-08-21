@@ -21,6 +21,7 @@ class AutoTuneCliTests(unittest.TestCase):
             trackio_space_id="user/trackio",
             trackio_server_url=None,
             trackio_group="nightly",
+            no_ui=True,
         )
         tuner = Mock()
 

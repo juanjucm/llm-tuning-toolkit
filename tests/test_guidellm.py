@@ -1,3 +1,4 @@
+import io
 import json
 import sys
 import tempfile
@@ -6,13 +7,50 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from rich.console import Console
+
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
+from auto_tune.display import AutoTuneDisplay
 from auto_tune.guidellm import GuideLLMRunner, _TerminalScreen, extract_metrics
 from auto_tune.tuner import AutoTuner
 
 
 class GuideLLMAdapterTests(unittest.TestCase):
+    def test_display_orders_run_state_and_renders_best_metrics(self):
+        display = AutoTuneDisplay()
+        display._model = "org/model"
+        display._scenario_name = "balanced"
+        display._task_id = display.progress.add_task("Configurations", total=4, completed=1)
+        parameters = {"value_args": {"max-num-seqs": 512}, "action_args": {"prefix-caching": True}}
+        display.begin_config(2, 4, parameters)
+        display.set_status("Running GuideLLM throughput benchmark")
+        display.set_best(
+            {
+                "throughput": 3.79,
+                "output_tokens_per_second": 7986.5,
+                "success_rate": 0.99,
+                "ttft_avg_ms": 42.0,
+                "ttft_p99_ms": 84.0,
+                "itl_avg_ms": 8.0,
+                "itl_p99_ms": 14.0,
+                "e2e_avg_ms": 2200.0,
+                "e2e_p99_ms": 3100.0,
+            },
+            parameters,
+        )
+
+        output = io.StringIO()
+        console = Console(file=output, width=180)
+        console.print(display._render())
+        rendered = output.getvalue()
+
+        for expected in ("org/model", "balanced", "Best run", "3.79 req/s", "42.0 / 84.0 ms", "Live benchmark"):
+            self.assertIn(expected, rendered)
+        self.assertLess(rendered.index("Configurations"), rendered.index("Current"))
+        self.assertLess(rendered.index("Current"), rendered.index("Status"))
+        self.assertLess(rendered.index("Status"), rendered.index("Best run"))
+
     def test_auto_tune_always_closes_the_display(self):
         tuner = AutoTuner.__new__(AutoTuner)
         tuner._run_auto_tune = Mock(side_effect=RuntimeError("boom"))

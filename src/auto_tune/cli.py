@@ -1,7 +1,7 @@
 import argparse
 import os
-from pathlib import Path
 import sys
+from pathlib import Path
 
 from auto_tune.display import AutoTuneDisplay
 from auto_tune.tuner import AutoTuner
@@ -39,26 +39,26 @@ def main() -> None:
         print(f"Error: Configuration file not found: {args.config}")
         sys.exit(1)
 
-    display = None if args.no_ui else AutoTuneDisplay()
-    tuner = AutoTuner(args.config, args.result_dir, args.dataset_id, args.cache_dir, args.hf_token, display)
-    try:
-        tuner.run_auto_tune()
-    finally:
-        if display:
-            display.stop()
     if not args.trackio_project and any((args.trackio_space_id, args.trackio_server_url, args.trackio_group)):
         parser.error("--trackio-project is required when other Trackio options are provided")
 
-    tuner = AutoTuner(
+    display = None if getattr(args, "no_ui", False) else AutoTuneDisplay()
+    tuner_options = dict(
         config_path=args.config,
         result_dir=args.result_dir,
         dataset_id=args.dataset_id,
         cache_dir=args.cache_dir,
         hf_token=args.hf_token,
-        display=display,
         trackio_project=args.trackio_project,
         trackio_space_id=args.trackio_space_id,
         trackio_server_url=args.trackio_server_url,
         trackio_group=args.trackio_group,
     )
-    tuner.run_auto_tune()
+    if display:
+        tuner_options["display"] = display
+    tuner = AutoTuner(**tuner_options)
+    try:
+        tuner.run_auto_tune()
+    finally:
+        if display:
+            display.stop()

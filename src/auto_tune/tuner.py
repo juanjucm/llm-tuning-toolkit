@@ -710,7 +710,7 @@ class AutoTuner:
                         "run_index": len(all_results),
                     }
                     if self.display:
-                        self.display.set_best(metrics["throughput"])
+                        self.display.set_best(metrics, param_config)
                     self.logger.info(
                         f"NEW BEST CONFIG! Throughput: {self.best_throughput['throughput']:.2f} req/s"
                     )
