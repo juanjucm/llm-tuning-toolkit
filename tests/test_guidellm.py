@@ -19,9 +19,19 @@ from auto_tune.tuner import AutoTuner
 class GuideLLMAdapterTests(unittest.TestCase):
     def test_display_orders_run_state_and_renders_best_metrics(self):
         display = AutoTuneDisplay()
-        display._model = "org/model"
-        display._scenario_name = "balanced"
-        display._task_id = display.progress.add_task("Configurations", total=4, completed=1)
+        display._live = Mock()
+        display.start(
+            total_configs=4,
+            model="org/model",
+            scenario_name="balanced",
+            scenario={
+                "load": {"kind": "throughput", "max_concurrency": 128},
+                "constraints": [{"kind": "max_requests", "count": 1000}],
+                "data": [{"kind": "synthetic_text", "prompt_tokens": 1024, "output_tokens": 128}],
+                "slos": {"min_success_rate": 0.99, "max_ttft_p99_ms": 250},
+            },
+        )
+        display.progress.update(display._task_id, completed=1)
         parameters = {"value_args": {"max-num-seqs": 512}, "action_args": {"prefix-caching": True}}
         display.begin_config(2, 4, parameters)
         display.set_status("Running GuideLLM throughput benchmark")
@@ -45,11 +55,44 @@ class GuideLLMAdapterTests(unittest.TestCase):
         console.print(display._render())
         rendered = output.getvalue()
 
-        for expected in ("org/model", "balanced", "Best run", "3.79 req/s", "42.0 / 84.0 ms", "Live benchmark"):
+        for expected in (
+            "org/model",
+            "balanced",
+            "Throughput · max concurrency 128",
+            "Max requests: 1,000",
+            "Synthetic text · input 1024 tok · output 128 tok",
+            "Success rate  ≥ 99.0%",
+            "TTFT p99  ≤ 250 ms",
+            "Best run",
+            "3.79 req/s",
+            "42.0 / 84.0 ms",
+            "Live benchmark",
+        ):
             self.assertIn(expected, rendered)
         self.assertLess(rendered.index("Configurations"), rendered.index("Current"))
         self.assertLess(rendered.index("Current"), rendered.index("Status"))
         self.assertLess(rendered.index("Status"), rendered.index("Best run"))
+
+    def test_display_formats_every_supported_workload_profile(self):
+        cases = {
+            "Throughput · max concurrency 64": {"kind": "throughput", "max_concurrency": 64},
+            "Concurrent · 32 streams · 4 turns · 0.5 s think time": {
+                "kind": "concurrent",
+                "streams": 32,
+                "turns": 4,
+                "delay": 0.5,
+            },
+            "Constant rate · 12 req/s · max concurrency 100": {
+                "kind": "constant",
+                "rate": 12,
+                "max_concurrency": 100,
+            },
+            "Poisson arrivals · 8 req/s": {"kind": "poisson", "rate": 8},
+            "Trace replay · 0.5× speed": {"kind": "replay", "time_scale": 0.5},
+        }
+        for expected, load in cases.items():
+            with self.subTest(load=load):
+                self.assertEqual(AutoTuneDisplay._format_workload(load), expected)
 
     def test_auto_tune_always_closes_the_display(self):
         tuner = AutoTuner.__new__(AutoTuner)

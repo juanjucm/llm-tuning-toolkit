@@ -599,6 +599,7 @@ class AutoTuner:
                 total_configs=len(param_combinations),
                 scenario_name=self.config["scenario"]["name"],
                 model=self.config["model"],
+                scenario=self.config["scenario"],
             )
 
         # Copy config file to results folder
