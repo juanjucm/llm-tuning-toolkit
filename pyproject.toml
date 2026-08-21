@@ -91,8 +91,19 @@ dependencies = [
 [project.scripts]
 auto-tune = "auto_tune.cli:main"
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-m 'not integration'"
+markers = [
+    "integration: run real GuideLLM against its mock server (slow, needs network, Linux only)",
+]
 
 [tool.ruff]
 line-length = 112
