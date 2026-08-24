@@ -1,0 +1,44 @@
+name: Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to test (empty = the branch selected above)"
+        required: false
+        type: string
+      integration:
+        description: "Run integration tests (real GuideLLM against its mock server)"
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: tests-${{ inputs.pr || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Optional: only improves Hub download rate limits. Tests use public
+    # models and datasets, so they pass without it.
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.pr && format('refs/pull/{0}/merge', inputs.pr) || github.ref }}
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv sync --python 3.12
+
+      - name: Unit tests
+        run: uv run pytest tests -m "not integration" -v
+
+      - name: Integration tests
+        if: ${{ inputs.integration }}
+        run: uv run pytest tests/integration -m integration -v

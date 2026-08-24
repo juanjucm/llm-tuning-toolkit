@@ -1,0 +1,71 @@
+name: Real engine benchmark
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to test (empty = the branch selected above)"
+        required: false
+        type: string
+      flavor:
+        description: "HF Jobs hardware"
+        required: true
+        default: a10g-small
+        type: choice
+        options:
+          - a10g-small
+          - a10g-large
+          - l4x1
+          - l40sx1
+          - a100-large
+          - h200
+      model:
+        description: "Model to serve with vLLM"
+        required: true
+        default: Qwen/Qwen3-0.6B
+        type: string
+      max_tokens:
+        description: "Output token cap (text datasets have no output lengths)"
+        required: true
+        default: "256"
+        type: string
+      namespace:
+        description: "HF namespace to bill and own the job (empty = token owner)"
+        required: false
+        type: string
+
+concurrency:
+  group: real-engine-${{ inputs.pr || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.pr && format('refs/pull/{0}/merge', inputs.pr) || github.ref }}
+
+      - name: Check credentials
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::error::HF_TOKEN secret is required to dispatch HF Jobs."
+            exit 1
+          fi
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Run benchmark on HF Jobs
+        run: |
+          uv tool run --from 'huggingface_hub[cli]' hf jobs uv run \
+            --flavor '${{ inputs.flavor }}' \
+            --timeout 45m \
+            -e MODEL='${{ inputs.model }}' \
+            -e MAX_TOKENS='${{ inputs.max_tokens }}' \
+            ${{ inputs.namespace && format('--namespace {0}', inputs.namespace) || '' }} \
+            tests/jobs/real_engine_job.py
