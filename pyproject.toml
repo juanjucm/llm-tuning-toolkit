@@ -33,7 +33,8 @@ dependencies = [
     "fsspec==2025.3.0",
     "gradio==6.25.0",
     "gradio-client==2.6.0",
-    "guidellm[recommended]>=0.7.3,<0.8",
+    # `vision` is required by the synthetic_image / synthetic_video data kinds.
+    "guidellm[recommended,vision]>=0.7.3,<0.8",
     "groovy==0.1.2",
     "h11==0.14.0",
     "httpcore==1.0.7",

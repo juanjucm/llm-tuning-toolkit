@@ -208,6 +208,9 @@ class AutoTuner:
             load.setdefault("max_concurrency", scenario.get("max_vus", 128))
         elif load["kind"] == "concurrent":
             load.setdefault("streams", scenario.get("max_vus", 128))
+            # GuideLLM's concurrent profile takes a list of stream counts.
+            if not isinstance(load["streams"], list):
+                load["streams"] = [load["streams"]]
         elif load["kind"] in {"constant", "poisson"}:
             if "rate" not in load:
                 raise ValueError(f"scenario.load.rate is required for {load['kind']} workloads")

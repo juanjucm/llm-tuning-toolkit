@@ -18,6 +18,9 @@ scenario:
     # preprocessor below converts these records to GuideLLM requests.
     - kind: json_file
       path: examples/data/tool-calls.jsonl
+      # Required on guidellm 0.7.3: file loaders return a DatasetDict and the
+      # column mapper crashes without an explicit split.
+      load_kwargs: {split: train}
   load:
     kind: throughput
     max_concurrency: 32
@@ -32,6 +35,13 @@ scenario:
   guidellm_options:
     sample_size: 20
     arguments:
+      # `messages` is not a default prompt column name, and column_mappings
+      # replaces the defaults wholesale, so `tools` must be listed too.
+      data-column-mapper:
+        kind: generative_column_mapper
+        column_mappings:
+          text_column: messages
+          tools_column: tools
       data-preprocessor:
         kind: tool_calling_message_extractor
       tokenizer:

@@ -12,7 +12,6 @@ scenario:
     - kind: synthetic_text
       prompt_tokens: 128
       output_tokens: 128
-      samples: 500
     # GuideLLM generates images locally; replace this descriptor with a
     # json_file/huggingface dataset descriptor to benchmark real images.
     - kind: synthetic_image

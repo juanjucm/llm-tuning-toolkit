@@ -201,6 +201,23 @@ class GuideLLMAdapterTests(unittest.TestCase):
         tuner.config["scenario"]["load"] = {"kind": "replay", "time_scale": 0.5}
         self.assertEqual(tuner._primary_profile(), {"kind": "replay", "time_scale": 0.5})
 
+    def test_concurrent_streams_are_normalized_to_a_list(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as handle:
+            handle.write(
+                "model: m\nport: 8000\ninstance_info: {gpu_type: t}\n"
+                "engine: {name: vllm, image: img, base_args: []}\n"
+                "scenario:\n"
+                "  name: s\n"
+                "  data: [{kind: synthetic_text, prompt_tokens: 8}]\n"
+                "  load: {kind: concurrent, streams: 12}\n"
+            )
+            config_path = handle.name
+
+        tuner = AutoTuner.__new__(AutoTuner)
+        tuner.config_path = config_path
+        config = tuner._load_config()
+        self.assertEqual(config["scenario"]["load"]["streams"], [12])
+
     def test_extract_metrics_uses_highest_throughput_strategy(self):
         def summary(mean, p99):
             return SimpleNamespace(
