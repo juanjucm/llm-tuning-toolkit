@@ -140,7 +140,7 @@ class GuideLLMAdapterTests(unittest.TestCase):
             ),
             ({"kind": "poisson", "rate": 8}, "Poisson arrivals · 8 req/s"),
             ({"kind": "replay", "time_scale": 0.5}, "Trace replay · 0.5× speed"),
-            ({"kind": "sweep"}, "Sweep · sweep_size=5"),
+            ({"kind": "constant", "rate": 4}, "Constant rate · 4 req/s"),
         ]
         for load, expected in cases:
             with self.subTest(load=load):
@@ -250,24 +250,31 @@ class GuideLLMAdapterTests(unittest.TestCase):
         tuner.config["scenario"]["load"] = {"kind": "replay", "time_scale": 0.5}
         self.assertEqual(tuner._primary_profile(), {"kind": "replay", "time_scale": 0.5})
 
-    def test_load_config_defaults_every_profile_kind_guidellm_registers(self):
+    def test_load_config_accepts_only_the_kinds_auto_tune_tunes(self):
         # GuideLLM's concurrent profile takes a list of stream counts.
         self.assertEqual(load_scenario(load={"kind": "concurrent", "streams": 12})["scenario"]["load"]["streams"], [12])
-        self.assertEqual(load_scenario(load={"kind": "sweep"})["scenario"]["load"]["sweep_size"], 5)
-        # `synchronous` is registered by GuideLLM and needs no defaults of its own.
-        self.assertEqual(load_scenario(load={"kind": "synchronous"})["scenario"]["load"], {"kind": "synchronous"})
+        self.assertEqual(load_scenario(load={"kind": "replay"})["scenario"]["load"]["time_scale"], 1.0)
 
         with self.assertRaises(ValueError) as unknown:
             load_scenario(load={"kind": "nonsense"})
         self.assertIn("is not a GuideLLM profile", str(unknown.exception))
-        self.assertIn("throughput", str(unknown.exception))
-        # A rejected kind must not be advertised as supported.
-        self.assertNotIn("async", str(unknown.exception))
+        # Declined kinds must not be advertised as supported.
+        self.assertIn(
+            "Supported: concurrent, constant, poisson, replay, throughput",
+            str(unknown.exception),
+        )
 
-        # `async` carries a rate, so this rejection is about the alias, not a missing field.
-        with self.assertRaises(ValueError) as alias:
-            load_scenario(load={"kind": "async", "rate": 5})
-        self.assertIn("alias for 'constant' and 'poisson'", str(alias.exception))
+        # Each declined kind names what to do instead. `async` carries a rate, so its
+        # rejection is about the alias rather than a missing field.
+        for load, guidance in (
+            ({"kind": "async", "rate": 5}, "use 'constant' or 'poisson' with an explicit rate"),
+            ({"kind": "synchronous"}, "measures a latency baseline"),
+            ({"kind": "sweep"}, "searches rates itself"),
+        ):
+            with self.subTest(kind=load["kind"]), self.assertRaises(ValueError) as declined:
+                load_scenario(load=load)
+            self.assertIn("is not supported", str(declined.exception))
+            self.assertIn(guidance, str(declined.exception))
 
         with self.assertRaises(ValueError) as rateless:
             load_scenario(load={"kind": "constant"})

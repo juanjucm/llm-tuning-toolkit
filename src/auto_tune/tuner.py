@@ -27,12 +27,16 @@ coloredlogs.install()
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 hf_api = HfApi()
 
-# Load kinds GuideLLM registers but auto-tune deliberately rejects, mapped to the
-# reason shown to the user. GuideLLM serves `async`, `constant` and `poisson` from a
-# single AsyncProfile class, so `async` is only a second spelling for a workload the
-# scenario can already express.
+# GuideLLM profiles auto-tune declines, mapped to the guidance shown to the user.
+# Auto-tune's job is to vary engine parameters against one production load, so a
+# profile that measures a baseline or a range of loads belongs in a plain GuideLLM
+# run instead.
 UNSUPPORTED_LOAD_KINDS = {
-    "async": "it is GuideLLM's alias for 'constant' and 'poisson'; use one of those with an explicit rate",
+    "async": "use 'constant' or 'poisson' with an explicit rate",
+    "synchronous": "single-request load measures a latency baseline, not a deployment target; "
+    "benchmark it with guidellm directly",
+    "sweep": "auto-tune tunes one load level at a time and searches rates itself; "
+    "use 'throughput' with scenario.max_rate_finding_attempts",
 }
 
 
@@ -274,13 +278,10 @@ class AutoTuner:
                 raise ValueError(f"scenario.load.rate is required for {kind} workloads")
         elif kind == "replay":
             load.setdefault("time_scale", 1.0)
-        elif kind == "sweep":
-            load.setdefault("sweep_size", 5)
         elif kind in UNSUPPORTED_LOAD_KINDS:
             raise ValueError(f"scenario.load.kind '{kind}' is not supported: {UNSUPPORTED_LOAD_KINDS[kind]}")
         elif kind not in ProfileFactory.registry:
-            # `synchronous` needs no defaults and falls through to here. GuideLLM's
-            # registry is the only authority on which kinds exist.
+            # GuideLLM's registry is the only authority on which kinds exist.
             raise ValueError(
                 f"scenario.load.kind '{kind}' is not a GuideLLM profile. "
                 f"Supported: {', '.join(sorted(ProfileFactory.registry.keys() - UNSUPPORTED_LOAD_KINDS.keys()))}"
@@ -519,9 +520,9 @@ class AutoTuner:
     def _select_load_point(self, candidates: List[Dict]) -> Tuple[Dict, List[Dict], bool]:
         """Choose the load point that represents one engine configuration.
 
-        Concurrent and sweep profiles measure several points. The fastest point that
-        satisfies every SLO is the answer; when none does, report the fastest point
-        overall so the configuration's peak throughput is still logged.
+        A concurrent profile measures one point per configured stream count. The
+        fastest point that satisfies every SLO is the answer; when none does, report
+        the fastest point overall so the configuration's peak throughput is logged.
 
         Args:
             candidates (List[Dict]): Normalized metrics, one per measured load point.

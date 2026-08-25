@@ -101,10 +101,10 @@ def extract_all_metrics(report: dict[str, Any]) -> list[dict[str, float]]:
         raise GuideLLMError(f"Could not parse GuideLLM JSON report: {error}") from error
     if not parsed.benchmarks:
         raise GuideLLMError("GuideLLM report contains no benchmark entries")
-    # Concurrent and sweep profiles report one benchmark per load point. SLO
-    # evaluation needs all of them: the most saturated point is the one most
-    # likely to violate a latency SLO, so collapsing to it discards the
-    # configurations that would have qualified at a lower load.
+    # A concurrent profile reports one benchmark per configured stream count. SLO
+    # evaluation needs all of them: the most saturated point is the one most likely
+    # to violate a latency SLO, so collapsing to it discards the configurations
+    # that would have qualified at a lower load.
     return sorted((_normalize(entry) for entry in parsed.benchmarks), key=lambda metrics: metrics["throughput"])
 
 
