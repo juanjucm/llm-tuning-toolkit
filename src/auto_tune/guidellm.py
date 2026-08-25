@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from guidellm.benchmark import GenerativeBenchmarksReport
+from guidellm.schemas.statistics import Percentiles
 
 from auto_tune.terminal import TerminalScreen
 
@@ -24,65 +25,51 @@ class GuideLLMError(RuntimeError):
     """Raised when GuideLLM fails or does not produce a usable report."""
 
 
+# Emit exactly the percentiles GuideLLM reports, so an SLO name cannot refer to a
+# percentile the report does not carry.
+PERCENTILE_NAMES: tuple[str, ...] = tuple(Percentiles.model_fields)
+SCALAR_METRIC_NAMES: tuple[str, ...] = (
+    "throughput",
+    "total_requests",
+    "successful_requests",
+    "failed_requests",
+    "success_rate",
+    "output_tokens_per_second",
+    "total_tokens_per_second",
+)
+LATENCY_METRIC_PREFIXES: tuple[str, ...] = ("ttft", "e2e", "itl")
+
+
+def metric_names() -> frozenset[str]:
+    """Every key extract_metrics can produce, for config-time SLO validation."""
+    return frozenset(
+        SCALAR_METRIC_NAMES
+        + tuple(
+            f"{prefix}_{suffix}"
+            for prefix in LATENCY_METRIC_PREFIXES
+            for suffix in ("avg_ms", *(f"{name}_ms" for name in PERCENTILE_NAMES))
+        )
+    )
+
+
 def _descriptor(value: dict[str, Any] | str) -> str:
     """Serialize a typed GuideLLM descriptor without losing nested settings."""
     return value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
 
 
-def extract_metrics(report: dict[str, Any]) -> dict[str, float]:
-    """Normalize a GuideLLM v0.7 report into metrics consumed by SLO checks.
+def _milliseconds(summary: Any, *, already_ms: bool) -> dict[str, float]:
+    """Read a latency summary's mean and every reported percentile, in milliseconds."""
+    factor = 1 if already_ms else 1000
+    values = {"avg_ms": summary.successful.mean * factor}
+    for name in PERCENTILE_NAMES:
+        values[f"{name}_ms"] = float(getattr(summary.successful.percentiles, name)) * factor
+    return values
 
-    The GuideLLM report schema is the source of truth here. In particular,
-    request latency is recorded in seconds while TTFT and ITL are milliseconds.
-    """
-    try:
-        parsed = GenerativeBenchmarksReport.model_validate(report)
-    except Exception as error:
-        raise GuideLLMError(f"Could not parse GuideLLM JSON report: {error}") from error
-    if not parsed.benchmarks:
-        raise GuideLLMError("GuideLLM report contains no benchmark entries")
 
-    # Throughput profiles have a single benchmark; a sweep can have many.
-    # Choose the strategy with the greatest successful request rate.
-    result = max(
-        parsed.benchmarks,
-        key=lambda benchmark: benchmark.metrics.requests_per_second.successful.mean,
-    )
+def _normalize(result: Any) -> dict[str, float]:
+    """Normalize one GuideLLM benchmark into the metric names SLOs refer to."""
     metrics = result.metrics
     totals = metrics.request_totals
-
-    def percentile_value(percentiles: Any, percentile: int) -> float | None:
-        """Read a percentile without assuming every GuideLLM version exposes it.
-
-        GuideLLM's standard percentile set is version-dependent (for example,
-        some releases provide p50/p75/p90/p95/p99 but not p60).  Reports may
-        also represent percentile values as a mapping rather than attributes.
-        """
-        name = f"p{percentile}"
-        value = getattr(percentiles, name, None)
-        if value is not None:
-            return float(value)
-
-        if hasattr(percentiles, "model_dump"):
-            percentiles = percentiles.model_dump()
-        if isinstance(percentiles, dict):
-            for key in (name, str(percentile), str(percentile / 100), percentile, percentile / 100):
-                value = percentiles.get(key)
-                if value is not None:
-                    return float(value)
-        return None
-
-    def milliseconds(summary: Any, *, already_ms: bool) -> dict[str, float]:
-        factor = 1 if already_ms else 1000
-        values = {
-            "avg_ms": summary.successful.mean * factor,
-        }
-        for percentile in (50, 60, 70, 80, 90, 95, 99):
-            value = percentile_value(summary.successful.percentiles, percentile)
-            if value is not None:
-                values[f"p{percentile}_ms"] = value * factor
-        return values
-
     normalized: dict[str, float] = {
         "throughput": metrics.requests_per_second.successful.mean,
         "total_requests": float(totals.total),
@@ -97,8 +84,33 @@ def extract_metrics(report: dict[str, Any]) -> dict[str, float]:
         ("e2e", metrics.request_latency, False),
         ("itl", metrics.inter_token_latency_ms, True),
     ):
-        normalized.update({f"{name}_{key}": value for key, value in milliseconds(summary, already_ms=already_ms).items()})
+        for key, value in _milliseconds(summary, already_ms=already_ms).items():
+            normalized[f"{name}_{key}"] = value
     return normalized
+
+
+def extract_all_metrics(report: dict[str, Any]) -> list[dict[str, float]]:
+    """Normalize every benchmark in a GuideLLM v0.7 report, by ascending throughput.
+
+    The GuideLLM report schema is the source of truth here. In particular,
+    request latency is recorded in seconds while TTFT and ITL are milliseconds.
+    """
+    try:
+        parsed = GenerativeBenchmarksReport.model_validate(report)
+    except Exception as error:
+        raise GuideLLMError(f"Could not parse GuideLLM JSON report: {error}") from error
+    if not parsed.benchmarks:
+        raise GuideLLMError("GuideLLM report contains no benchmark entries")
+    # Concurrent and sweep profiles report one benchmark per load point. SLO
+    # evaluation needs all of them: the most saturated point is the one most
+    # likely to violate a latency SLO, so collapsing to it discards the
+    # configurations that would have qualified at a lower load.
+    return sorted((_normalize(entry) for entry in parsed.benchmarks), key=lambda metrics: metrics["throughput"])
+
+
+def extract_metrics(report: dict[str, Any]) -> dict[str, float]:
+    """Normalize the highest-throughput benchmark of a GuideLLM v0.7 report."""
+    return extract_all_metrics(report)[-1]
 
 
 class GuideLLMRunner:
@@ -120,6 +132,63 @@ class GuideLLMRunner:
         on_output: Callable[[str], None] | None = None,
         show_console: bool = True,
     ) -> dict[str, float]:
+        """Run one benchmark and return its highest-throughput load point."""
+        return extract_metrics(
+            self._execute(
+                target=target,
+                data=data,
+                profile=profile,
+                constraints=constraints,
+                output_path=output_path,
+                backend=backend,
+                options=options,
+                on_output=on_output,
+                show_console=show_console,
+            )
+        )
+
+    def run_all(
+        self,
+        *,
+        target: str,
+        data: list[dict[str, Any] | str],
+        profile: dict[str, Any],
+        constraints: list[dict[str, Any] | str],
+        output_path: Path,
+        backend: dict[str, Any] | str | None = None,
+        options: dict[str, Any] | None = None,
+        on_output: Callable[[str], None] | None = None,
+        show_console: bool = True,
+    ) -> list[dict[str, float]]:
+        """Run one benchmark and return every load point it measured, ascending."""
+        return extract_all_metrics(
+            self._execute(
+                target=target,
+                data=data,
+                profile=profile,
+                constraints=constraints,
+                output_path=output_path,
+                backend=backend,
+                options=options,
+                on_output=on_output,
+                show_console=show_console,
+            )
+        )
+
+    def _execute(
+        self,
+        *,
+        target: str,
+        data: list[dict[str, Any] | str],
+        profile: dict[str, Any],
+        constraints: list[dict[str, Any] | str],
+        output_path: Path,
+        backend: dict[str, Any] | str | None = None,
+        options: dict[str, Any] | None = None,
+        on_output: Callable[[str], None] | None = None,
+        show_console: bool = True,
+    ) -> dict[str, Any]:
+        """Build and run the GuideLLM command line, returning its JSON report."""
         backend_config: dict[str, Any] | str = backend or {"kind": "openai_http", "target": target}
         if isinstance(backend_config, dict):
             backend_config = {**backend_config, "target": backend_config.get("target", target)}
@@ -163,21 +232,21 @@ class GuideLLMRunner:
                 raise GuideLLMError("GuideLLM is not installed; install the project dependencies first") from error
             except subprocess.CalledProcessError as error:
                 raise GuideLLMError(f"GuideLLM failed with exit code {error.returncode}") from error
-            return self._read_metrics(output_path)
+            return self._read_report(output_path)
 
         returncode = self._run_with_live_output(cmd, on_output)
         if returncode:
             raise GuideLLMError(f"GuideLLM failed with exit code {returncode}")
 
-        return self._read_metrics(output_path)
+        return self._read_report(output_path)
 
     @staticmethod
-    def _read_metrics(output_path: Path) -> dict[str, float]:
-        """Read and normalize the JSON report created by GuideLLM."""
+    def _read_report(output_path: Path) -> dict[str, Any]:
+        """Read the JSON report created by GuideLLM."""
         if not output_path.exists():
             raise GuideLLMError(f"GuideLLM completed without creating {output_path}")
         with output_path.open() as file:
-            return extract_metrics(json.load(file))
+            return json.load(file)
 
     @staticmethod
     def _run_with_live_output(cmd: list[str], on_output: Callable[[str], None]) -> int:
