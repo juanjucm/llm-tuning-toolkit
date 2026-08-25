@@ -27,6 +27,14 @@ coloredlogs.install()
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 hf_api = HfApi()
 
+# Load kinds GuideLLM registers but auto-tune deliberately rejects, mapped to the
+# reason shown to the user. GuideLLM serves `async`, `constant` and `poisson` from a
+# single AsyncProfile class, so `async` is only a second spelling for a workload the
+# scenario can already express.
+UNSUPPORTED_LOAD_KINDS = {
+    "async": "it is GuideLLM's alias for 'constant' and 'poisson'; use one of those with an explicit rate",
+}
+
 
 class _DisplayLogHandler(logging.Handler):
     """Route application logs into the Rich live display."""
@@ -268,12 +276,14 @@ class AutoTuner:
             load.setdefault("time_scale", 1.0)
         elif kind == "sweep":
             load.setdefault("sweep_size", 5)
+        elif kind in UNSUPPORTED_LOAD_KINDS:
+            raise ValueError(f"scenario.load.kind '{kind}' is not supported: {UNSUPPORTED_LOAD_KINDS[kind]}")
         elif kind not in ProfileFactory.registry:
-            # `synchronous` and `async` need no defaults and fall through to here.
-            # GuideLLM's registry is the only authority on which kinds exist.
+            # `synchronous` needs no defaults and falls through to here. GuideLLM's
+            # registry is the only authority on which kinds exist.
             raise ValueError(
                 f"scenario.load.kind '{kind}' is not a GuideLLM profile. "
-                f"Supported: {', '.join(sorted(ProfileFactory.registry))}"
+                f"Supported: {', '.join(sorted(ProfileFactory.registry.keys() - UNSUPPORTED_LOAD_KINDS.keys()))}"
             )
         arguments = scenario.get("guidellm_options", {}).get("arguments", {})
         if "constraint" in arguments or "constraints" in arguments:

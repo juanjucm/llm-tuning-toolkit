@@ -261,6 +261,13 @@ class GuideLLMAdapterTests(unittest.TestCase):
             load_scenario(load={"kind": "nonsense"})
         self.assertIn("is not a GuideLLM profile", str(unknown.exception))
         self.assertIn("throughput", str(unknown.exception))
+        # A rejected kind must not be advertised as supported.
+        self.assertNotIn("async", str(unknown.exception))
+
+        # `async` carries a rate, so this rejection is about the alias, not a missing field.
+        with self.assertRaises(ValueError) as alias:
+            load_scenario(load={"kind": "async", "rate": 5})
+        self.assertIn("alias for 'constant' and 'poisson'", str(alias.exception))
 
         with self.assertRaises(ValueError) as rateless:
             load_scenario(load={"kind": "constant"})
