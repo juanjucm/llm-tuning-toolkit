@@ -13,19 +13,28 @@ scenario:
   backend:
     kind: openai_http
     request_format: /v1/chat/completions
+    # Caps generation so the end-to-end SLO below measures bounded responses.
+    max_tokens: 128
   data:
-    # Each JSONL record supplies messages, tools, and tool_choice. The
-    # preprocessor below converts these records to GuideLLM requests.
+    # Each JSONL record supplies messages and tools. The preprocessor below
+    # converts these records to GuideLLM requests.
     - kind: json_file
-      path: examples/data/tool-calls.jsonl
+      # Use an absolute path: the descriptor is forwarded verbatim to GuideLLM
+      # and resolved against the current directory, and the tuner copies this
+      # config into the results directory.
+      path: /absolute/path/to/tool-calls.jsonl
       # Required on guidellm 0.7.3: file loaders return a DatasetDict and the
       # column mapper crashes without an explicit split.
       load_kwargs: {split: train}
   load:
     kind: throughput
     max_concurrency: 32
-  throughput_duration_seconds: 60
-  rate_duration_seconds: 30
+  constraints:
+    - kind: max_duration
+      seconds: 60
+  rate_constraints:
+    - kind: max_duration
+      seconds: 30
   max_rate_finding_attempts: 3
   rate_decrease_factor: 0.25
   slos:

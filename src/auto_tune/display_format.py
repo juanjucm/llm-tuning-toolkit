@@ -27,12 +27,13 @@ def format_workload(load: dict[str, Any]) -> str:
     if kind == "throughput" and load.get("max_concurrency") is not None:
         details.append(f"max concurrency {load['max_concurrency']}")
     elif kind == "concurrent":
-        if load.get("streams") is not None:
-            details.append(f"{load['streams']} streams")
-        if load.get("turns") is not None:
-            details.append(f"{load['turns']} turns")
-        if load.get("delay") is not None:
-            details.append(f"{load['delay']} s think time")
+        streams = load.get("streams")
+        if streams is not None:
+            # _load_config normalizes streams to a list, so render the members,
+            # not the list repr. `turns` and `delay` are data settings, not
+            # profile fields: GuideLLM's ProfileArgs rejects them outright.
+            rendered = ", ".join(str(value) for value in streams) if isinstance(streams, list) else str(streams)
+            details.append(f"{rendered} streams")
     elif kind in {"constant", "poisson"}:
         if load.get("rate") is not None:
             details.append(f"{load['rate']} req/s")

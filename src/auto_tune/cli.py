@@ -54,7 +54,10 @@ def tune(
     ] = "",
     no_ui: Annotated[
         bool,
-        typer.Option("--no-ui", help="Run without terminal UI or benchmark log output."),
+        typer.Option(
+            "--no-ui",
+            help="Run without the terminal UI; tuner logs go to stdout and GuideLLM output is suppressed.",
+        ),
     ] = False,
     trackio_project: Annotated[
         str | None,

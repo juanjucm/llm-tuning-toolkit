@@ -1,8 +1,12 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#   "vllm",
-#   "guidellm[recommended]==0.7.3",
+#   "vllm==0.11.0",
+#   # Installing the project is what makes this job a real guard: the benchmark
+#   # runs through auto_tune's own driver instead of a copy of it. This also
+#   # pulls guidellm[recommended,vision] and huggingface_hub transitively.
+#   # Point the ref at main once this PR merges.
+#   "llm-tuning-toolkit @ git+https://github.com/juanjucm/llm-tuning-toolkit@migrate-to-guidellm",
 # ]
 # ///
 """
@@ -18,9 +22,10 @@ SLOs from the GuideLLM SLO guide. Exit code reflects benchmark failures, not
 SLO misses (an SLO miss is a result, not an error).
 
 Dispatched by .github/workflows/real-engine.yml, or by hand:
-  hf jobs uv run tests/jobs/real_engine_job.py --flavor a10g-small --timeout 45m
+  hf jobs uv run tests/jobs/real_engine_job.py --flavor a10g-small --timeout 150m
 
-Env: MODEL, MAX_MODEL_LEN, MAX_TOKENS.
+Env: MODEL, MAX_MODEL_LEN, MAX_TOKENS, RESULTS_REPO (HF dataset repo that
+receives the benchmark JSON and logs; empty or unset discards them).
 """
 
 from __future__ import annotations
@@ -33,6 +38,10 @@ import sys
 import time
 import urllib.request
 from pathlib import Path
+from typing import Any
+
+from auto_tune.guidellm import GuideLLMError, GuideLLMRunner
+from auto_tune.tuner import evaluate_slos
 
 MODEL = os.environ.get("MODEL", "Qwen/Qwen3-0.6B")
 MAX_MODEL_LEN = os.environ.get("MAX_MODEL_LEN", "8192")
@@ -52,6 +61,10 @@ SLOS = {
     "max_ttft_p99_ms": 200.0,
     "max_itl_p99_ms": 50.0,
 }
+# Ceiling for a single benchmark, enforced inside GuideLLM as a max_duration
+# constraint so a stalled run stops itself and still writes a report. The HF
+# Jobs --timeout is the hard stop for a process that wedges below that level.
+MAX_BENCHMARK_SECONDS = 1800
 
 summary: dict[str, dict] = {}
 
@@ -179,73 +192,69 @@ def make_trace() -> tuple[Path, float]:
     return path, rows[-1]["timestamp"]
 
 
-def metrics_from(report_path: Path) -> dict[str, float]:
-    from guidellm.benchmark import GenerativeBenchmarksReport
-
-    parsed = GenerativeBenchmarksReport.load_file(str(report_path))
-    benchmark = max(
-        parsed.benchmarks,
-        key=lambda b: b.metrics.requests_per_second.successful.mean,
-    )
-    m = benchmark.metrics
-    totals = m.request_totals
-    return {
-        "throughput": m.requests_per_second.successful.mean,
-        "success_rate": (totals.successful / totals.total) if totals.total else 0.0,
-        "successful": float(totals.successful),
-        "duration_s": benchmark.duration,
-        "output_tokens_per_second": m.output_tokens_per_second.successful.mean,
-        "prompt_tokens_mean": m.prompt_token_count.successful.mean,
-        "output_tokens_mean": m.output_token_count.successful.mean,
-        "ttft_p50_ms": m.time_to_first_token_ms.successful.percentiles.p50,
-        "ttft_p99_ms": m.time_to_first_token_ms.successful.percentiles.p99,
-        "itl_p99_ms": m.inter_token_latency_ms.successful.percentiles.p99,
-        "e2e_p99_ms": m.request_latency.successful.percentiles.p99 * 1000,
-    }
-
-
 def check_slos(metrics: dict[str, float]) -> tuple[list[str], bool]:
-    results, ok = [], True
-    for name, threshold in SLOS.items():
-        metric = name.removeprefix("min_").removeprefix("max_")
-        value = metrics[metric]
-        passed = value >= threshold if name.startswith("min_") else value <= threshold
-        ok = ok and passed
-        results.append(f"{'ok  ' if passed else 'MISS'} {name}={threshold} actual={value:.2f}")
-    return results, ok
+    """Format the tuner's own SLO verdicts for the summary block."""
+    checks, ok = evaluate_slos(SLOS, metrics)
+    lines = []
+    for check in checks:
+        name = next(key for key in check if key.startswith(("min_", "max_")))
+        threshold, value = check[name], check[name[4:]]
+        lines.append(f"{'ok  ' if check['meets'] else 'MISS'} {name}={threshold} actual={value:.2f}")
+    return lines, ok
 
 
-def run_guidellm(name: str, extra_args: list[str]) -> dict[str, float] | None:
-    report = RESULTS / f"{name}.json"
-    cmd = [
-        GUIDELLM, "run",
-        "--backend", json.dumps(
-            {"kind": "openai_http", "target": TARGET, "model": MODEL}
-            | ({"max_tokens": int(MAX_TOKENS)} if MAX_TOKENS else {})
-        ),
-        "--tokenizer", f"kind=huggingface_auto,model={MODEL}",
-        "--output", f"kind=json,path={report}",
-        "--metrics", "kind=generative,sample_size=0",
-        "--disable-console-interactive",
-        *extra_args,
-    ]
+def run_guidellm(
+    name: str,
+    *,
+    profile: dict[str, Any],
+    data: list[dict[str, Any] | str],
+    constraints: list[dict[str, Any]] | None = None,
+    arguments: dict[str, Any] | None = None,
+) -> dict[str, float] | None:
+    """Run one benchmark through the production runner and record its verdict."""
+    backend: dict[str, Any] = {"kind": "openai_http", "target": TARGET, "model": MODEL}
+    if MAX_TOKENS:
+        backend["max_tokens"] = int(MAX_TOKENS)
+
     log(f"{name}: running")
-    log_path = RESULTS / f"{name}.log"
-    with log_path.open("w") as logf:
-        proc = subprocess.run(cmd, stdout=logf, stderr=subprocess.STDOUT, timeout=1800)
-    if proc.returncode != 0:
-        summary[name] = {"status": "FAIL", "reason": f"guidellm exit {proc.returncode}",
-                         "log_tail": log_path.read_text()[-1500:]}
-        log(f"{name}: FAIL (exit {proc.returncode})")
-        return None
+    started = time.monotonic()
+    try:
+        metrics = GuideLLMRunner(command=GUIDELLM).run(
+            target=TARGET,
+            data=data,
+            profile=profile,
+            constraints=[
+                *(constraints or []),
+                {"kind": "max_duration", "seconds": MAX_BENCHMARK_SECONDS},
+            ],
+            output_path=RESULTS / f"{name}.json",
+            backend=backend,
+            options={
+                "sample_size": 0,
+                "arguments": {
+                    "tokenizer": {"kind": "huggingface_auto", "model": MODEL},
+                    **(arguments or {}),
+                },
+            },
+            show_console=False,
+        )
+    except GuideLLMError as error:
+        reason = str(error)
+    else:
+        elapsed = time.monotonic() - started
+        slo_lines, slo_ok = check_slos(metrics)
+        summary[name] = {"status": "OK", "slo_met": slo_ok, "metrics": metrics,
+                         "slos": slo_lines, "elapsed_s": elapsed}
+        log(f"{name}: {metrics['throughput']:.2f} req/s | "
+            f"ttft p50 {metrics['ttft_p50_ms']:.0f} ms p99 {metrics['ttft_p99_ms']:.0f} ms | "
+            f"itl p99 {metrics['itl_p99_ms']:.1f} ms | slo_met={slo_ok} | {elapsed:.0f} s")
+        return metrics
 
-    metrics = metrics_from(report)
-    slo_lines, slo_ok = check_slos(metrics)
-    summary[name] = {"status": "OK", "slo_met": slo_ok, "metrics": metrics, "slos": slo_lines}
-    log(f"{name}: {metrics['throughput']:.2f} req/s | "
-        f"ttft p50 {metrics['ttft_p50_ms']:.0f} ms p99 {metrics['ttft_p99_ms']:.0f} ms | "
-        f"itl p99 {metrics['itl_p99_ms']:.1f} ms | slo_met={slo_ok}")
-    return metrics
+    # GuideLLM's own console output is suppressed in this headless job, so the
+    # vLLM log is the only diagnostic left when a benchmark fails.
+    summary[name] = {"status": "FAIL", "reason": reason, "log_tail": vllm_log_tail(60)}
+    log(f"{name}: FAIL ({reason})")
+    return None
 
 
 def main() -> int:
@@ -258,57 +267,61 @@ def main() -> int:
     server = start_vllm()
 
     try:
-        sharegpt_metrics = run_guidellm("sharegpt", [
-            "--profile", "kind=throughput,max_concurrency=32",
-            "--constraint", "kind=max_requests,count=100",
-            "--data", json.dumps({
-                "kind": "json_file",
-                "path": str(sharegpt_path),
-                "load_kwargs": {"split": "train"},
-            }),
-            "--data-column-mapper", json.dumps({
+        throughput = {"kind": "throughput", "max_concurrency": 32}
+        sharegpt_data: list[dict[str, Any] | str] = [{
+            "kind": "json_file",
+            "path": str(sharegpt_path),
+            "load_kwargs": {"split": "train"},
+        }]
+        sharegpt_arguments = {
+            "data_column_mapper": {
                 "kind": "generative_column_mapper",
                 "column_mappings": {"text_column": "conversations"},
-            }),
-            "--data-preprocessor", "kind=tool_calling_message_extractor",
-        ])
+            },
+            "data_preprocessor": {"kind": "tool_calling_message_extractor"},
+        }
 
-        run_guidellm("hf_dataset", [
-            "--profile", "kind=throughput,max_concurrency=32",
-            "--constraint", "kind=max_requests,count=100",
-            "--data", json.dumps({
+        sharegpt_metrics = run_guidellm(
+            "sharegpt",
+            profile=throughput,
+            data=sharegpt_data,
+            constraints=[{"kind": "max_requests", "count": 100}],
+            arguments=sharegpt_arguments,
+        )
+
+        run_guidellm(
+            "hf_dataset",
+            profile=throughput,
+            data=[{
                 "kind": "huggingface",
                 "source": "garage-bAInd/Open-Platypus",
                 "load_kwargs": {"split": "train"},
-            }),
-            "--data-column-mapper", json.dumps({
-                "kind": "generative_column_mapper",
-                "column_mappings": {"text_column": "instruction"},
-            }),
-            "--data-loader", "kind=pytorch,samples=200",
-        ])
+            }],
+            constraints=[{"kind": "max_requests", "count": 100}],
+            arguments={
+                "data_column_mapper": {
+                    "kind": "generative_column_mapper",
+                    "column_mappings": {"text_column": "instruction"},
+                },
+                "data_loader": {"kind": "pytorch", "samples": 200},
+            },
+        )
 
-        run_guidellm("trace", [
-            "--profile", "kind=replay,time_scale=1.0",
-            "--data", f"kind=trace_synthetic,path={trace_path}",
-        ])
+        run_guidellm(
+            "trace",
+            profile={"kind": "replay", "time_scale": 1.0},
+            data=[{"kind": "trace_synthetic", "path": str(trace_path)}],
+        )
 
         if sharegpt_metrics:
             rate = max(sharegpt_metrics["throughput"] * 0.5, 0.5)
-            run_guidellm("sharegpt_rate", [
-                "--profile", f"kind=constant,rate={rate:.3f},max_concurrency=32",
-                "--constraint", "kind=max_requests,count=60",
-                "--data", json.dumps({
-                    "kind": "json_file",
-                    "path": str(sharegpt_path),
-                    "load_kwargs": {"split": "train"},
-                }),
-                "--data-column-mapper", json.dumps({
-                    "kind": "generative_column_mapper",
-                    "column_mappings": {"text_column": "conversations"},
-                }),
-                "--data-preprocessor", "kind=tool_calling_message_extractor",
-            ])
+            run_guidellm(
+                "sharegpt_rate",
+                profile={"kind": "constant", "rate": round(rate, 3), "max_concurrency": 32},
+                data=sharegpt_data,
+                constraints=[{"kind": "max_requests", "count": 60}],
+                arguments=sharegpt_arguments,
+            )
     finally:
         server.terminate()
         try:
@@ -322,17 +335,19 @@ def main() -> int:
         print(f"\n--- {name}: {result['status']}")
         if result["status"] != "OK":
             print(f"    {result['reason']}")
+            print("    --- vLLM log tail ---")
             print(result.get("log_tail", ""))
             continue
         m = result["metrics"]
         print(f"    throughput      {m['throughput']:.2f} req/s "
-              f"({m['output_tokens_per_second']:.0f} out tok/s)")
-        print(f"    tokens          prompt {m['prompt_tokens_mean']:.0f} / "
-              f"output {m['output_tokens_mean']:.0f}")
+              f"({m['output_tokens_per_second']:.0f} out tok/s, "
+              f"{m['total_tokens_per_second']:.0f} total tok/s)")
         print(f"    ttft            p50 {m['ttft_p50_ms']:.1f} ms | p99 {m['ttft_p99_ms']:.1f} ms")
         print(f"    itl p99         {m['itl_p99_ms']:.2f} ms")
         print(f"    e2e p99         {m['e2e_p99_ms']:.0f} ms")
-        print(f"    requests        {m['successful']:.0f} in {m['duration_s']:.1f} s")
+        print(f"    requests        {m['successful_requests']:.0f} ok / "
+              f"{m['total_requests']:.0f} ({m['success_rate']:.1%}) "
+              f"in {result['elapsed_s']:.1f} s")
         for line in result["slos"]:
             print(f"    slo  {line}")
 

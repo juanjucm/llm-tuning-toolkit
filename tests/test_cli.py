@@ -1,3 +1,5 @@
+import io
+import logging
 import sys
 import tempfile
 import unittest
@@ -94,6 +96,28 @@ class AutoTuneCliTests(unittest.TestCase):
         self.assertEqual(auto_tuner.call_args.kwargs["result_dir"], "out")
         self.assertTrue(auto_tuner.call_args.kwargs["quiet"])
         tuner.run_auto_tune.assert_called_once_with()
+
+    def test_no_ui_still_writes_tuner_logs(self):
+        example = Path(__file__).parents[1] / "examples" / "guidellm-auto-tune.yaml"
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory) / "config.yaml"
+            config.write_text(example.read_text())
+            with patch("docker.from_env"):
+                tuner = cli.AutoTuner(config_path=str(config), result_dir=directory, quiet=True)
+
+            try:
+                handlers = [handler for handler in tuner.logger.handlers if type(handler) is logging.StreamHandler]
+                self.assertEqual(len(handlers), 1)
+                self.assertFalse(tuner.logger.propagate)
+                # --no-ui documents stdout, so redirecting stdout captures the run log.
+                self.assertIs(handlers[0].stream, sys.stdout)
+
+                stream = io.StringIO()
+                handlers[0].setStream(stream)
+                tuner.logger.error("VISIBLE")
+                self.assertIn("VISIBLE", stream.getvalue())
+            finally:
+                tuner._close_display()
 
     def test_help_lists_the_primary_options(self):
         result = self.runner.invoke(cli.app, ["--help"])

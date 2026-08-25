@@ -8,13 +8,10 @@ version = "0.1.0"
 description = "Toolkit for automatic tuning and benchmarking of LLM serving configurations."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
-# TODO: fix this. It doesn't load the benchmark correctly if these are not the exact dependencies.
 dependencies = [
     "aiofiles==23.2.1",
     "annotated-types==0.7.0",
     "anyio==4.9.0",
-    "boto3==1.37.21",
-    "botocore==1.37.21",
     "certifi==2025.1.31",
     "cffi==1.17.1",
     "charset-normalizer==3.4.1",
@@ -42,14 +39,11 @@ dependencies = [
     "huggingface-hub>=1.16.0,<2.0",
     "idna==3.10",
     "jinja2==3.1.6",
-    "jmespath==1.0.1",
     "kiwisolver==1.4.8",
     "markdown-it-py==3.0.0",
     "markupsafe==2.1.5",
-    "matplotlib==3.10.1",
     "mdurl==0.1.2",
     "numpy==2.2.4",
-    "opensearch-py==2.8.0",
     "orjson==3.10.16",
     "packaging==24.2",
     "pandas==2.2.3",
@@ -58,10 +52,7 @@ dependencies = [
     "pycparser==2.22",
     "pydantic>=2.11.7,<3.0",
     "pydub==0.25.1",
-    "pygithub==2.6.1",
     "pygments==2.19.1",
-    "pyjwt==2.10.1",
-    "pynacl==1.5.0",
     "pyparsing==3.2.3",
     "python-dateutil==2.9.0.post0",
     "python-multipart==0.0.20",
@@ -69,10 +60,7 @@ dependencies = [
     "pyyaml==6.0.2",
     "requests==2.32.3",
     "rich==13.9.4",
-    "ruff==0.11.2",
-    "s3transfer==0.11.4",
     "safehttpx>=0.1.7,<0.2.0",
-    "scienceplots==2.1.1",
     "semantic-version==2.10.0",
     "shellingham==1.5.4",
     "six==1.17.0",
@@ -95,6 +83,7 @@ auto-tune = "auto_tune.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "ruff==0.11.2",
 ]
 
 [tool.setuptools.packages.find]

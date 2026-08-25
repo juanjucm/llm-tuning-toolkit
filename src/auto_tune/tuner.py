@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import shutil
+import sys
 import time
 import uuid
 from copy import deepcopy
@@ -14,10 +15,11 @@ import coloredlogs
 import docker
 import requests
 import yaml
+from guidellm.benchmark.profiles import ProfileFactory
 from huggingface_hub import HfApi
 
 from auto_tune.display import AutoTuneDisplay
-from auto_tune.guidellm import GuideLLMError, GuideLLMRunner
+from auto_tune.guidellm import GuideLLMError, GuideLLMRunner, metric_names
 from auto_tune.tracking import TrackioTracker
 
 coloredlogs.install()
@@ -39,6 +41,29 @@ class _DisplayLogHandler(logging.Handler):
             error = record.exc_info[1]
             message = f"{message}\n{type(error).__name__}: {error}"
         self.display.log(message, record.levelname)
+
+
+def evaluate_slos(slos: Dict, metrics: Dict) -> Tuple[List[Dict], bool]:
+    """Compare metrics against min_/max_ SLO thresholds.
+
+    Names are validated when the config loads, so the errors raised here only fire
+    for a hand-built SLO mapping.
+    """
+    results = []
+    for threshold_name, threshold_value in slos.items():
+        if not threshold_name.startswith(("min_", "max_")):
+            raise ValueError(f"SLO '{threshold_name}' must start with min_ or max_")
+        metric_name = threshold_name[4:]
+        if metric_name not in metrics:
+            raise ValueError(f"SLO '{threshold_name}' refers to unsupported metric '{metric_name}'")
+        metric_value = metrics[metric_name]
+        if threshold_name.startswith("max_"):
+            meets = metric_value <= threshold_value
+        else:
+            meets = metric_value >= threshold_value
+        results.append({threshold_name: threshold_value, metric_name: metric_value, "meets": meets})
+
+    return results, all(result["meets"] for result in results)
 
 
 class AutoTuner:
@@ -93,7 +118,10 @@ class AutoTuner:
             self.logger.addHandler(self._owned_log_handler)
             self.logger.propagate = False
         elif self.quiet:
-            self._owned_log_handler = logging.NullHandler()
+            # No Rich UI, but the tuner's own records must still reach the terminal:
+            # a headless run that reports nothing is indistinguishable from a hung one.
+            self._owned_log_handler = logging.StreamHandler(sys.stdout)
+            self._owned_log_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
             self.logger.addHandler(self._owned_log_handler)
             self.logger.propagate = False
 
@@ -164,7 +192,28 @@ class AutoTuner:
             )
         if not isinstance(scenario["data"], list) or not scenario["data"]:
             raise ValueError("scenario.data must be a non-empty list of GuideLLM data descriptors")
+        if "goodput_criteria" in scenario and "slos" in scenario:
+            raise ValueError("Use scenario.slos; remove the legacy scenario.goodput_criteria key")
         scenario.setdefault("slos", scenario.pop("goodput_criteria", {}))
+        slos = scenario["slos"]
+        if not isinstance(slos, dict) or not slos:
+            raise ValueError(
+                "scenario.slos must be a non-empty mapping of min_/max_ SLO names. "
+                "See examples/guidellm-auto-tune.yaml."
+            )
+        # Validate the names here, not in _meets_goodput_criteria: that runs inside the
+        # per-config try/except, so a single typo would launch a container and run a full
+        # benchmark for every parameter combination before yielding zero results.
+        supported = metric_names()
+        for name in slos:
+            if not name.startswith(("min_", "max_")):
+                raise ValueError(f"SLO '{name}' must start with min_ or max_")
+            metric = name[4:]
+            if metric not in supported:
+                raise ValueError(
+                    f"SLO '{name}' refers to unsupported metric '{metric}'. "
+                    f"Supported metrics: {', '.join(sorted(supported))}"
+                )
         has_legacy_throughput_duration = "throughput_duration_seconds" in scenario
         has_legacy_rate_duration = "rate_duration_seconds" in scenario
         legacy_throughput_duration = scenario.get("throughput_duration_seconds", 90)
@@ -204,21 +253,27 @@ class AutoTuner:
         if not isinstance(load, dict):
             raise ValueError("scenario.load must be a mapping")
         load.setdefault("kind", "throughput")
-        if load["kind"] == "throughput":
+        kind = load["kind"]
+        if kind == "throughput":
             load.setdefault("max_concurrency", scenario.get("max_vus", 128))
-        elif load["kind"] == "concurrent":
+        elif kind == "concurrent":
             load.setdefault("streams", scenario.get("max_vus", 128))
             # GuideLLM's concurrent profile takes a list of stream counts.
             if not isinstance(load["streams"], list):
                 load["streams"] = [load["streams"]]
-        elif load["kind"] in {"constant", "poisson"}:
+        elif kind in {"constant", "poisson"}:
             if "rate" not in load:
-                raise ValueError(f"scenario.load.rate is required for {load['kind']} workloads")
-        elif load["kind"] == "replay":
+                raise ValueError(f"scenario.load.rate is required for {kind} workloads")
+        elif kind == "replay":
             load.setdefault("time_scale", 1.0)
-        else:
+        elif kind == "sweep":
+            load.setdefault("sweep_size", 5)
+        elif kind not in ProfileFactory.registry:
+            # `synchronous` and `async` need no defaults and fall through to here.
+            # GuideLLM's registry is the only authority on which kinds exist.
             raise ValueError(
-                "scenario.load.kind must be 'throughput', 'concurrent', 'constant', 'poisson', or 'replay'"
+                f"scenario.load.kind '{kind}' is not a GuideLLM profile. "
+                f"Supported: {', '.join(sorted(ProfileFactory.registry))}"
             )
         arguments = scenario.get("guidellm_options", {}).get("arguments", {})
         if "constraint" in arguments or "constraints" in arguments:
@@ -365,14 +420,15 @@ class AutoTuner:
         except Exception as error:
             self.logger.warning("Error removing container: %s", error)
 
-    def _run_throughput_benchmark(self, run_id: str, output_folder: str) -> Optional[Dict]:
-        """Run throughput benchmark to discover maximum throughput
+    def _run_throughput_benchmark(self, run_id: str, output_folder: str) -> Optional[List[Dict]]:
+        """Run the production load benchmark and return every load point it measured.
 
         Args:
             run_id (str): Unique identifier for this benchmark run. Will be used for results file naming.
             output_folder (str): Directory to save benchmark results.
         Returns:
-            Optional[Dict]: Parsed benchmark results or None if failed.
+            Optional[List[Dict]]: Normalized metrics per load point, ascending by throughput,
+            or None if the benchmark failed.
         """
         self.logger.info("Running %s benchmark...", self.config["scenario"]["load"]["kind"])
         self._set_display_status(f"Running GuideLLM {self.config['scenario']['load']['kind']} benchmark")
@@ -382,7 +438,7 @@ class AutoTuner:
         output_file = os.path.join(output_folder, f"{scenario['load']['kind']}_{run_id}.json")
 
         try:
-            return self.guidellm.run(
+            return self.guidellm.run_all(
                 target=f"http://localhost:{port}",
                 backend=scenario.get("backend"),
                 data=scenario["data"],
@@ -427,7 +483,7 @@ class AutoTuner:
                 profile={
                     "kind": "constant",
                     "rate": rate,
-                    "max_concurrency": scenario["load"]["max_concurrency"],
+                    "max_concurrency": scenario["load"].get("max_concurrency", scenario.get("max_vus", 128)),
                 },
                 constraints=scenario["rate_constraints"],
                 output_path=Path(output_file),
@@ -448,26 +504,23 @@ class AutoTuner:
         Returns:
             Tuple[List[Dict], bool]: List of threshold checks and overall meets status.
         """
-        thresholds = self.config["scenario"]["slos"]
+        return evaluate_slos(self.config["scenario"]["slos"], metrics)
 
-        results = []
-        for threshold_name, threshold_value in thresholds.items():
-            if threshold_name.startswith("max_"):
-                metric_name = threshold_name.removeprefix("max_")
-                comparison = lambda value: value <= threshold_value
-            elif threshold_name.startswith("min_"):
-                metric_name = threshold_name.removeprefix("min_")
-                comparison = lambda value: value >= threshold_value
-            else:
-                raise ValueError(f"SLO '{threshold_name}' must start with min_ or max_")
-            if metric_name not in metrics:
-                raise ValueError(f"SLO '{threshold_name}' refers to unsupported metric '{metric_name}'")
-            metric_value = metrics[metric_name]
-            results.append({threshold_name: threshold_value, metric_name: metric_value, "meets": comparison(metric_value)})
+    def _select_load_point(self, candidates: List[Dict]) -> Tuple[Dict, List[Dict], bool]:
+        """Choose the load point that represents one engine configuration.
 
-        meets = all(r["meets"] for r in results)
+        Concurrent and sweep profiles measure several points. The fastest point that
+        satisfies every SLO is the answer; when none does, report the fastest point
+        overall so the configuration's peak throughput is still logged.
 
-        return results, meets
+        Args:
+            candidates (List[Dict]): Normalized metrics, one per measured load point.
+        Returns:
+            Tuple[Dict, List[Dict], bool]: Chosen metrics, its SLO checks, and whether it passed.
+        """
+        evaluated = [(point, *self._meets_goodput_criteria(point)) for point in candidates]
+        qualifying = [entry for entry in evaluated if entry[2]]
+        return max(qualifying or evaluated, key=lambda entry: entry[0]["throughput"])
 
     def _find_optimal_rate(
         self, max_throughput: float, run_id: str, output_folder: str
@@ -639,17 +692,17 @@ class AutoTuner:
                         "instance_info": self.config.get("instance_info", {}),
                     },
                 )
-                metrics = self._run_throughput_benchmark(
+                candidates = self._run_throughput_benchmark(
                     run_id=run_id,
                     output_folder=engine_path.as_posix(),
                 )
-                if not metrics:
+                if not candidates:
                     self.logger.error("Failed to run throughput benchmark, continuing to next config...")
                     continue
 
-                self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
+                metrics, goodput_checks, meets = self._select_load_point(candidates)
 
-                goodput_checks, meets = self._meets_goodput_criteria(metrics)
+                self.logger.info(f"Throughput: {metrics['throughput']:.2f} req/s")
                 self.tracker.log_metrics(metrics, slo_met=meets)
                 self.logger.info("Goodput SLOs checks:")
                 self.logger.info(json.dumps(goodput_checks, indent=2))

@@ -20,7 +20,9 @@ scenario:
   load:
     kind: concurrent
     streams: 8
-  throughput_duration_seconds: 60
+  constraints:
+    - kind: max_duration
+      seconds: 60
   slos:
     min_success_rate: 0.99
     max_ttft_p99_ms: 2500

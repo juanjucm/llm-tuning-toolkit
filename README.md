@@ -12,9 +12,6 @@ Auto-tuning uses [GuideLLM](https://github.com/vllm-project/guidellm) against
 the OpenAI-compatible endpoint exposed by each engine container. It is installed
 with the project dependencies.
 
-GuideLLM keeps its normal terminal output during auto-tuning, including its live
-benchmark progress. The tuner logs are shown before and after each GuideLLM run.
-
 ## Installation
 
 First you need to setup your environment with [`uv`](https://github.com/astral-sh/uv).
@@ -240,9 +237,25 @@ override the scenario name used to group runs.
 
 For tool calling, provide a GuideLLM dataset with tool-call messages and add the
 `tool_calling_message_extractor` data preprocessor through
-`scenario.guidellm_options.arguments`. Enable the matching vLLM tool parser in
-the engine's `base_args`. For vision/audio/video, pass GuideLLM multimodal data
-descriptors in the same `scenario.data` list.
+`scenario.guidellm_options.arguments`. Two further settings are mandatory on
+GuideLLM 0.7.3, and omitting either one silently benchmarks plain chat at 100%
+"success" instead of tool calls:
+
+- `load_kwargs: {split: train}` on the data descriptor — required on guidellm
+  0.7.3: file loaders return a `DatasetDict` and the column mapper crashes
+  without an explicit split.
+- An explicit `data-column-mapper` with
+  `column_mappings: {text_column: messages, tools_column: tools}` — `messages` is
+  not a default prompt column name, and `column_mappings` replaces the defaults
+  wholesale, so `tools` must be listed too. Without `tools_column` no tool
+  definitions reach the server.
+
+Requests must also use `backend.request_format: /v1/chat/completions`, because
+OpenAI tool definitions are carried in chat-completion requests. Enable the
+matching vLLM tool parser in the engine's `base_args`.
+[`examples/guidellm-tool-calls.yaml`](examples/guidellm-tool-calls.yaml) is a
+complete, runnable configuration. For vision/audio/video, pass GuideLLM
+multimodal data descriptors in the same `scenario.data` list.
 
 The Typer-based CLI validates configuration paths and exposes its full option
 reference through built-in help:
@@ -260,6 +273,7 @@ Results are stored under `out/` unless `--result-dir` specifies another path.
 By default, auto-tune uses a colored static terminal view showing sweep progress,
 the active parameter combination, the best valid throughput, and GuideLLM's live
 benchmark progress. GuideLLM runs in a pseudo-terminal so its interactive progress can
-be embedded without including setup messages or final report tables. Use `--no-ui` for
-a silent run: it disables the live display, fallback auto-tune logs, and GuideLLM's
-native console output.
+be embedded without including setup messages or final report tables. Use `--no-ui`
+to run without the terminal UI: no Rich live display is installed, GuideLLM's own
+console output is suppressed, and the tuner's log records are written to stdout as
+plain text.

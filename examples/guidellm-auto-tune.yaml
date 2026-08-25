@@ -86,12 +86,23 @@ engine:
 
 # To benchmark real multimodal or tool-calling requests, replace or add data
 # descriptors. GuideLLM supports repeated --data descriptors, so multiple kinds
-# can be combined in a single chat request. For dataset-backed tool calls use:
+# can be combined in a single chat request. For dataset-backed tool calls use
+# the form below; examples/guidellm-tool-calls.yaml is the complete recipe.
 #
+# backend: {kind: openai_http, request_format: /v1/chat/completions}
 # data:
-#   - {kind: json_file, path: /absolute/path/tool_calls.jsonl}
+#   - kind: json_file
+#     path: /absolute/path/to/tool-calls.jsonl
+#     # Required on guidellm 0.7.3: file loaders return a DatasetDict and the
+#     # column mapper crashes without an explicit split.
+#     load_kwargs: {split: train}
 # guidellm_options:
 #   arguments:
+#     # `messages` is not a default prompt column name, and column_mappings
+#     # replaces the defaults wholesale, so `tools` must be listed too.
+#     data-column-mapper:
+#       kind: generative_column_mapper
+#       column_mappings: {text_column: messages, tools_column: tools}
 #     data-preprocessor: {kind: tool_calling_message_extractor}
 #
 # The vLLM server must also be configured for the model's tool parser, e.g.
