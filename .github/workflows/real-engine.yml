@@ -29,6 +29,15 @@ on:
         required: true
         default: "256"
         type: string
+      max_model_len:
+        description: "vLLM --max-model-len for the served model"
+        required: false
+        default: "8192"
+        type: string
+      results_repo:
+        description: "HF dataset repo to receive benchmark JSON (empty = discard)"
+        required: false
+        type: string
       namespace:
         description: "HF namespace to bill and own the job (empty = token owner)"
         required: false
@@ -41,7 +50,7 @@ concurrency:
 jobs:
   benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 180
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
     steps:
@@ -61,11 +70,28 @@ jobs:
           enable-cache: true
 
       - name: Run benchmark on HF Jobs
+        env:
+          FLAVOR: ${{ inputs.flavor }}
+          MODEL: ${{ inputs.model }}
+          MAX_TOKENS: ${{ inputs.max_tokens }}
+          MAX_MODEL_LEN: ${{ inputs.max_model_len }}
+          NAMESPACE: ${{ inputs.namespace }}
+          RESULTS_REPO: ${{ inputs.results_repo }}
         run: |
-          uv tool run --from 'huggingface_hub[cli]' hf jobs uv run \
-            --flavor '${{ inputs.flavor }}' \
-            --timeout 45m \
-            -e MODEL='${{ inputs.model }}' \
-            -e MAX_TOKENS='${{ inputs.max_tokens }}' \
-            ${{ inputs.namespace && format('--namespace {0}', inputs.namespace) || '' }} \
+          namespace_args=()
+          if [ -n "$NAMESPACE" ]; then
+            namespace_args=(--namespace "$NAMESPACE")
+          fi
+          # Worst case: 900 s vLLM readiness plus four benchmarks capped at
+          # 1800 s each. --secrets forwards the token into the job itself, so
+          # gated models, the ShareGPT fetch and the results upload all work.
+          uv tool run --from 'huggingface_hub[cli]>=1.16.0,<2.0' hf jobs uv run \
+            --flavor "$FLAVOR" \
+            --timeout 150m \
+            --secrets HF_TOKEN \
+            -e MODEL="$MODEL" \
+            -e MAX_TOKENS="$MAX_TOKENS" \
+            -e MAX_MODEL_LEN="$MAX_MODEL_LEN" \
+            -e RESULTS_REPO="$RESULTS_REPO" \
+            "${namespace_args[@]}" \
             tests/jobs/real_engine_job.py

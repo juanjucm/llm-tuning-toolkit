@@ -1,6 +1,9 @@
 name: Tests
 
 on:
+  pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       pr:
@@ -34,11 +37,11 @@ jobs:
         with:
           enable-cache: true
 
-      - run: uv sync --python 3.12
+      - run: uv sync --locked --python 3.12
 
       - name: Unit tests
-        run: uv run pytest tests -m "not integration" -v
+        run: uv run pytest tests -v
 
       - name: Integration tests
-        if: ${{ inputs.integration }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.integration }}
         run: uv run pytest tests/integration -m integration -v
