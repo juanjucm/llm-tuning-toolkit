@@ -1,5 +1,6 @@
 import io
 import logging
+import re
 import sys
 import tempfile
 import unittest
@@ -11,6 +12,19 @@ from typer.testing import CliRunner
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from auto_tune import cli
+
+ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def plain(output: str) -> str:
+    """CLI output with Rich styling, panel borders and line wrapping removed.
+
+    Typer forces a terminal whenever GITHUB_ACTIONS is set (typer/rich_utils.py:78),
+    so on CI the help and error panels arrive styled and wrapped: `--config` is
+    emitted as separate escape-delimited runs and never appears as a literal
+    substring. Only the text is part of the CLI's contract, not the styling.
+    """
+    return " ".join(ANSI_ESCAPE.sub("", output).replace("│", " ").split())
 
 
 class AutoTuneCliTests(unittest.TestCase):
@@ -80,8 +94,10 @@ class AutoTuneCliTests(unittest.TestCase):
                 )
 
         self.assertNotEqual(result.exit_code, 0)
-        self.assertIn("use either --trackio-space-id", result.output)
-        self.assertIn("--trackio-server-url, not both", result.output)
+        self.assertIn(
+            "use either --trackio-space-id or --trackio-server-url, not both",
+            plain(result.output),
+        )
         auto_tuner.assert_not_called()
 
     def test_results_are_persistent_by_default(self):
@@ -123,9 +139,10 @@ class AutoTuneCliTests(unittest.TestCase):
         result = self.runner.invoke(cli.app, ["--help"])
 
         self.assertEqual(result.exit_code, 0, result.output)
-        self.assertIn("--config", result.output)
-        self.assertIn("--no-ui", result.output)
-        self.assertIn("--trackio-project", result.output)
+        rendered = plain(result.output)
+        self.assertIn("--config", rendered)
+        self.assertIn("--no-ui", rendered)
+        self.assertIn("--trackio-project", rendered)
 
 
 if __name__ == "__main__":
