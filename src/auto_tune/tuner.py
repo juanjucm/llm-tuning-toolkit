@@ -39,6 +39,36 @@ UNSUPPORTED_LOAD_KINDS = {
     "use 'throughput' with scenario.max_rate_finding_attempts",
 }
 
+_ENGINE_PARALLEL_ARGUMENTS = {
+    "vllm": {"tp": "tensor_parallel_size", "dp": "data_parallel_size"},
+    "sglang": {"tp": "tp_size", "dp": "dp_size"},
+}
+_ENGINE_DEFAULT_ENTRYPOINTS = {
+    "sglang": ["python3", "-m", "sglang.launch_server"],
+}
+_ENGINE_DEFAULT_HEALTH_PATHS = {
+    "vllm": "/health",
+    "sglang": "/health_generate",
+}
+
+
+def _engine_family(engine_config: Dict) -> str:
+    """Return the engine implementation while allowing descriptive run names."""
+    configured = str(engine_config.get("kind") or engine_config.get("name", "vllm")).lower()
+    for family in _ENGINE_PARALLEL_ARGUMENTS:
+        if configured == family or configured.startswith((f"{family}-", f"{family}_")):
+            return family
+    return configured
+
+
+def _engine_health_path(engine_config: Dict) -> str:
+    """Return an overrideable readiness endpoint for the configured engine."""
+    path = str(
+        engine_config.get("health_path")
+        or _ENGINE_DEFAULT_HEALTH_PATHS.get(_engine_family(engine_config), "/health")
+    )
+    return f"/{path.lstrip('/')}"
+
 
 class _DisplayLogHandler(logging.Handler):
     """Route application logs into the Rich live display."""
@@ -353,7 +383,7 @@ class AutoTuner:
             docker_args = {
                 key: value
                 for key, value in docker_config.items()
-                if key in {"devices", "group_add", "security_opt"}
+                if key in {"devices", "group_add", "security_opt", "ipc_mode"}
             }
             if "devices" in engine_config:
                 docker_args["device_requests"] = [
@@ -365,18 +395,25 @@ class AutoTuner:
                 **docker_config.get("environment", {}),
             }
 
-            container = self.docker_client.containers.run(
-                image=engine_config["image"],
-                command=" ".join([str(a) for a in engine_args]),
-                shm_size="2g",
-                environment=environment,
-                volumes={self.cache_dir: {"bind": "/data/", "mode": "rw"}},
-                ports={f"{port}/tcp": port},
-                detach=True,
-                name=container_name,
-                stop_signal="SIGTERM",
+            run_args = {
+                "image": engine_config["image"],
+                "command": [str(argument) for argument in engine_args],
+                "shm_size": docker_config.get("shm_size", "2g"),
+                "environment": environment,
+                "volumes": {self.cache_dir: {"bind": "/data/", "mode": "rw"}},
+                "ports": {f"{port}/tcp": port},
+                "detach": True,
+                "name": container_name,
+                "stop_signal": "SIGTERM",
                 **docker_args,
-            )
+            }
+            entrypoint = engine_config.get("entrypoint")
+            if entrypoint is None:
+                entrypoint = _ENGINE_DEFAULT_ENTRYPOINTS.get(_engine_family(engine_config))
+            if entrypoint is not None:
+                run_args["entrypoint"] = entrypoint
+
+            container = self.docker_client.containers.run(**run_args)
 
             return container
 
@@ -404,7 +441,8 @@ class AutoTuner:
                     self.logger.error("Engine container has stopped unexpectedly.")
                     return False
 
-                response = requests.get(f"http://localhost:{port}/health", timeout=5)
+                health_path = _engine_health_path(self.config["engine"])
+                response = requests.get(f"http://localhost:{port}{health_path}", timeout=5)
                 if response.status_code == 200:
                     self.logger.info("Engine is ready!")
                     self._set_display_status("Engine ready")
@@ -619,8 +657,15 @@ class AutoTuner:
                 # Handle special case for tp-dp-combinations
                 if "tp-dp-combinations" in combination["value_args"].keys():
                     tp_dp_comb = combination["value_args"].pop("tp-dp-combinations")
-                    combination["value_args"]["tensor_parallel_size"] = tp_dp_comb["tp"]
-                    combination["value_args"]["data_parallel_size"] = tp_dp_comb["dp"]
+                    family = _engine_family(engine_config)
+                    parallel_args = _ENGINE_PARALLEL_ARGUMENTS.get(family)
+                    if parallel_args is None:
+                        raise ValueError(
+                            "engine.value_args_pool.tp-dp-combinations is only supported for "
+                            f"vllm and sglang, not '{family}'"
+                        )
+                    combination["value_args"][parallel_args["tp"]] = tp_dp_comb["tp"]
+                    combination["value_args"][parallel_args["dp"]] = tp_dp_comb["dp"]
 
                 combinations.append(combination)
 

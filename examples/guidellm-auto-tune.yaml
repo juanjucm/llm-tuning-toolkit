@@ -64,7 +64,8 @@ engine:
   image: vllm/vllm-openai:latest
   devices: ["0"] # NVIDIA GPU indexes; omit this when using docker.devices below.
   # Optional Docker runtime arguments (for example, when using ROCm instead of
-  # the NVIDIA GPU index above): devices, group_add, security_opt, and environment.
+  # the NVIDIA GPU index above): devices, group_add, security_opt, environment,
+  # ipc_mode, and shm_size.
   # docker:
   #   devices: ["/dev/kfd:/dev/kfd:rwm", "/dev/dri:/dev/dri:rwm"]
   #   group_add: ["993"]
