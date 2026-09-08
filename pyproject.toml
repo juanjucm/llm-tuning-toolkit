@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "llm-tuning-toolkit"
 version = "0.1.0"
-description = "Toolkit for automatic tuning and benchmarking of LLM serving configurations."
+description = "Toolkit for automatic tuning of LLM serving configurations."
 readme = "README.md"
 requires-python = ">=3.10,<3.13"
 dependencies = [
