@@ -45,6 +45,23 @@ The supported `scenario.load.kind` values are `throughput`, `concurrent`,
 `constant`, `poisson`, and `replay`. Throughput mode uses the SLO-driven
 constant-rate fallback; all other modes evaluate the declared workload directly.
 
+### Engine backends
+
+Auto-tune can launch vLLM or SGLang containers. Engine `base_args`,
+`value_args_pool`, and `action_args_pool` are passed through, so use the native
+server arguments for the selected engine. Set `engine.kind: sglang` to use
+SGLang's `python3 -m sglang.launch_server` entrypoint and `/health_generate`
+readiness check; both can be overridden with `engine.entrypoint` and
+`engine.health_path`.
+
+The special `tp-dp-combinations` sweep maps to `--tensor-parallel-size` and
+`--data-parallel-size` for vLLM, and to `--tp-size` and `--dp-size` for SGLang.
+See [`examples/guidellm-sglang-auto-tune.yaml`](examples/guidellm-sglang-auto-tune.yaml)
+for a runnable single-GPU configuration. SGLang's official
+[Docker installation guide](https://docs.sglang.io/docs/get-started/install) and
+[server arguments](https://docs.sglang.io/docs/advanced_features/server_arguments)
+describe the engine-specific options available for additional sweeps.
+
 ### How to simulate your scenario
 
 Choose the traffic model separately from the condition that ends a benchmark.

@@ -214,6 +214,8 @@ class GuideLLMAdapterTests(unittest.TestCase):
         self.assertEqual(kwargs["security_opt"], ["seccomp=unconfined"])
         self.assertEqual(kwargs["environment"]["ROCR_VISIBLE_DEVICES"], "0,1")
         self.assertEqual(kwargs["environment"]["HF_HUB_CACHE"], "/data/")
+        self.assertEqual(kwargs["command"], ["--model", "example/model"])
+        self.assertNotIn("entrypoint", kwargs)
         self.assertNotIn("device_requests", kwargs)
 
     def test_existing_gpu_device_selection_is_preserved(self):
@@ -232,6 +234,69 @@ class GuideLLMAdapterTests(unittest.TestCase):
         request = tuner.docker_client.containers.run.call_args.kwargs["device_requests"][0]
         self.assertEqual(request["DeviceIDs"], ["0"])
         self.assertEqual(request["Capabilities"], [["gpu"]])
+
+    def test_sglang_launch_uses_server_entrypoint_and_docker_settings(self):
+        tuner = AutoTuner.__new__(AutoTuner)
+        tuner.config = {
+            "port": 30000,
+            "engine": {
+                "name": "sglang-experiment",
+                "image": "lmsysorg/sglang:latest",
+                "docker": {"ipc_mode": "host", "shm_size": "32g"},
+            },
+        }
+        tuner.hf_token = ""
+        tuner.cache_dir = "/tmp/cache"
+        tuner.logger = Mock()
+        tuner.docker_client = Mock()
+
+        tuner._launch_docker_engine(["--model-path", "Qwen/Qwen3-0.6B"])
+
+        kwargs = tuner.docker_client.containers.run.call_args.kwargs
+        self.assertEqual(kwargs["entrypoint"], ["python3", "-m", "sglang.launch_server"])
+        self.assertEqual(kwargs["command"], ["--model-path", "Qwen/Qwen3-0.6B"])
+        self.assertEqual(kwargs["ipc_mode"], "host")
+        self.assertEqual(kwargs["shm_size"], "32g")
+
+    def test_sglang_uses_generation_readiness_endpoint(self):
+        tuner = AutoTuner.__new__(AutoTuner)
+        tuner.config = {"engine": {"kind": "sglang"}}
+        tuner.logger = Mock()
+        tuner.display = None
+        container = Mock(status="running")
+
+        with patch("auto_tune.tuner.requests.get", return_value=SimpleNamespace(status_code=200)) as get:
+            self.assertTrue(tuner._wait_for_server_ready(container, 30000, timeout=1))
+
+        get.assert_called_once_with("http://localhost:30000/health_generate", timeout=5)
+
+    def test_tp_dp_combinations_use_engine_specific_arguments(self):
+        cases = {
+            "vllm": (
+                {"tensor_parallel_size": 4, "data_parallel_size": 2},
+                ["--tensor-parallel-size", "4", "--data-parallel-size", "2"],
+            ),
+            "sglang": (
+                {"tp_size": 4, "dp_size": 2},
+                ["--tp-size", "4", "--dp-size", "2"],
+            ),
+        }
+        for engine, (value_args, expected_cli) in cases.items():
+            with self.subTest(engine=engine):
+                tuner = AutoTuner.__new__(AutoTuner)
+                tuner.logger = Mock()
+                tuner.config = {
+                    "engine": {
+                        "name": engine,
+                        "base_args": [],
+                        "value_args_pool": {"tp-dp-combinations": [{"tp": 4, "dp": 2}]},
+                    }
+                }
+
+                combinations = tuner._generate_parameter_combinations()
+
+                self.assertEqual(combinations, [{"value_args": value_args, "action_args": {}}])
+                self.assertEqual(tuner._build_engine_args(combinations[0]), expected_cli)
 
     def test_load_profiles_map_to_their_guidellm_parameters(self):
         tuner = AutoTuner.__new__(AutoTuner)
