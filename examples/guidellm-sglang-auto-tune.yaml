@@ -1,0 +1,67 @@
+# Launch with:
+# auto-tune --config examples/guidellm-sglang-auto-tune.yaml
+
+model: &model "Qwen/Qwen3-0.6B"
+host: &host "0.0.0.0"
+port: &port 30000
+
+instance_info:
+  gpu_type: "NVIDIA GPU"
+  gpu_count: 1
+
+scenario:
+  name: "sglang-text"
+  data:
+    - kind: synthetic_text
+      prompt_tokens: 512
+      prompt_tokens_min: 128
+      prompt_tokens_max: 2048
+      output_tokens: 128
+      output_tokens_min: 32
+      output_tokens_max: 512
+  load:
+    kind: throughput
+    max_concurrency: 128
+  max_requests: 500
+  rate_max_requests: 300
+  max_rate_finding_attempts: 3
+  rate_decrease_factor: 0.3
+  slos:
+    min_success_rate: 0.99
+    max_ttft_p99_ms: 1500
+    max_e2e_p99_ms: 8000
+  guidellm_options:
+    sample_size: 0
+    arguments:
+      tokenizer: {kind: huggingface_auto, model: *model}
+
+engine:
+  # `kind` selects SGLang's launch defaults. `name` remains the result label.
+  kind: sglang
+  name: sglang
+  # Pin the image for repeatable comparisons; update deliberately when upgrading.
+  image: "lmsysorg/sglang:v0.5.18"
+  devices: ["0"]
+  timeout: 1800
+  docker:
+    # SGLang recommends host IPC and a large shared-memory allocation.
+    ipc_mode: host
+    shm_size: "32g"
+  base_args:
+    - --model-path
+    - *model
+    - --host
+    - *host
+    - --port
+    - *port
+    - --context-length
+    - "8192"
+    - --mem-fraction-static
+    - "0.85"
+  value_args_pool:
+    max-running-requests: [64, 128]
+    chunked-prefill-size: [2048, 4096]
+    # Auto-tune maps these to SGLang's --tp-size and --dp-size.
+    tp-dp-combinations:
+      - {tp: 1, dp: 1}
+  action_args_pool: {}

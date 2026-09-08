@@ -1,0 +1,188 @@
+[
+  {
+    "id": "fixture_0",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Explain the difference between a process and a thread to a junior developer. Cover scheduling, memory, and when to prefer one over the other."
+      },
+      {
+        "from": "gpt",
+        "value": "A process is an independent execution unit with its own address space. A thread shares the address space of its parent process. Prefer threads for shared-memory parallelism and processes for isolation."
+      },
+      {
+        "from": "human",
+        "value": "Give me a concrete example in Python where threads are the wrong choice."
+      },
+      {
+        "from": "gpt",
+        "value": "CPU-bound work in CPython, because the GIL serializes bytecode execution. Use multiprocessing there."
+      }
+    ]
+  },
+  {
+    "id": "fixture_1",
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a concise technical writer."
+      },
+      {
+        "from": "human",
+        "value": "Summarize what a reverse proxy does in two sentences."
+      },
+      {
+        "from": "gpt",
+        "value": "A reverse proxy accepts client requests and forwards them to backend servers. It handles TLS termination, load balancing, and caching."
+      }
+    ]
+  },
+  {
+    "id": "fixture_2",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "I have a CSV file with columns timestamp, service, latency_ms. Write a pandas snippet that computes the p99 latency per service for the last hour of data."
+      },
+      {
+        "from": "gpt",
+        "value": "df[df.timestamp >= df.timestamp.max() - pd.Timedelta(hours=1)].groupby('service').latency_ms.quantile(0.99)"
+      },
+      {
+        "from": "human",
+        "value": "Now extend it to also report the request count per service, sorted by p99 descending."
+      },
+      {
+        "from": "gpt",
+        "value": "Use agg with two functions: grouped.agg(p99=('latency_ms', lambda s: s.quantile(0.99)), count=('latency_ms', 'size')).sort_values('p99', ascending=False)"
+      }
+    ]
+  },
+  {
+    "id": "fixture_3",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "What is the CAP theorem and why does it matter for distributed databases?"
+      },
+      {
+        "from": "gpt",
+        "value": "CAP states that under network partition a system chooses between consistency and availability. It matters because partitions are inevitable, so every distributed database makes this tradeoff explicit."
+      }
+    ]
+  },
+  {
+    "id": "fixture_4",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Draft a short incident postmortem template. Sections: summary, impact, timeline, root cause, action items. Keep each section description under twenty words."
+      },
+      {
+        "from": "gpt",
+        "value": "Summary: what happened in one line. Impact: who and what was affected. Timeline: detection to resolution. Root cause: the underlying failure. Action items: owners and deadlines."
+      },
+      {
+        "from": "human",
+        "value": "Add a section for what went well during the response."
+      },
+      {
+        "from": "gpt",
+        "value": "What went well: effective behaviors worth repeating, such as fast detection or clear communication."
+      }
+    ]
+  },
+  {
+    "id": "fixture_5",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "List three differences between TCP and UDP that matter for a video streaming service."
+      },
+      {
+        "from": "gpt",
+        "value": "Retransmission: TCP retransmits lost packets, UDP does not. Ordering: TCP guarantees order, UDP does not. Overhead: TCP has connection state and headers that add latency."
+      }
+    ]
+  },
+  {
+    "id": "fixture_6",
+    "conversations": [
+      {
+        "from": "system",
+        "value": "You are a database performance expert."
+      },
+      {
+        "from": "human",
+        "value": "A query scans 50 million rows but only needs rows from the last day. The table has a created_at column. What are my options, cheapest first?"
+      },
+      {
+        "from": "gpt",
+        "value": "Add an index on created_at. If the table is append-mostly, consider partitioning by day. For repeated aggregates, use a materialized view."
+      },
+      {
+        "from": "human",
+        "value": "The index exists but the planner ignores it. What do you check?"
+      },
+      {
+        "from": "gpt",
+        "value": "Check selectivity: a last-day filter on recent data may still match too many rows. Run ANALYZE to refresh statistics, and verify the query casts do not defeat the index."
+      }
+    ]
+  },
+  {
+    "id": "fixture_7",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Convert this cron expression to plain English: 30 4 * * 1-5"
+      },
+      {
+        "from": "gpt",
+        "value": "At 04:30 on every weekday, Monday through Friday."
+      }
+    ]
+  },
+  {
+    "id": "fixture_8",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Write a bash one-liner that finds the ten largest files under /var/log and prints their sizes in human-readable form."
+      },
+      {
+        "from": "gpt",
+        "value": "find /var/log -type f -exec du -h {} + | sort -rh | head -10"
+      },
+      {
+        "from": "human",
+        "value": "How do I exclude files smaller than 100 megabytes before sorting?"
+      },
+      {
+        "from": "gpt",
+        "value": "Add -size +100M to the find command: find /var/log -type f -size +100M -exec du -h {} + | sort -rh | head -10"
+      }
+    ]
+  },
+  {
+    "id": "fixture_9",
+    "conversations": [
+      {
+        "from": "human",
+        "value": "Our Kubernetes pods keep getting OOMKilled after deploys. The container limit is 512Mi and the app is a JVM service. Explain the likely cause and two fixes."
+      },
+      {
+        "from": "gpt",
+        "value": "The JVM heap plus metaspace and thread stacks exceed the container limit. Fix one: set -Xmx well below 512Mi or use MaxRAMPercentage. Fix two: raise the limit or use a JRE that reads cgroup limits correctly."
+      },
+      {
+        "from": "human",
+        "value": "Which JVM version started reading cgroup limits correctly by default?"
+      },
+      {
+        "from": "gpt",
+        "value": "Java 8u191 and later backports, and properly from Java 11 onward with container support enabled by default."
+      }
+    ]
+  }
+]

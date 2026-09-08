@@ -1,0 +1,110 @@
+model: &model "meta-llama/Llama-3.1-8B-Instruct"
+port: &port 8000
+instance_info:
+  gpu_type: Nvidia L40S
+  gpu_count: 1
+
+scenario:
+  name: balanced-text
+  # Every descriptor is passed unchanged to `guidellm run --data`.  Use JSON
+  # descriptors for nested values, datasets, media, tool definitions, or turns.
+  data:
+    - kind: synthetic_text
+      prompt_tokens: 1024
+      prompt_tokens_min: 64
+      prompt_tokens_max: 4096
+      output_tokens: 128
+      output_tokens_min: 64
+      output_tokens_max: 1024
+  # Default stopping condition: every created request reaches a terminal outcome.
+  # Change these counts directly, or use constraints / rate_constraints with a
+  # max_duration descriptor when a fixed wall-clock test is required.
+  max_requests: 1000
+  rate_max_requests: 1000
+  # Choose the load model that matches the production contract:
+  #
+  # `throughput`: GuideLLM drives the server
+  # as fast as possible, but never exceeds max_concurrency. It answers:
+  # "With at most 128 simultaneous requests, what is the highest req/s that
+  # meets the SLOs?" The tuner then validates a fixed rate and reduces that
+  # rate if required by the SLOs.
+  # load:
+  # kind: throughput
+  # max_concurrency: 128
+  #
+  # `concurrent`: GuideLLM keeps exactly `streams` requests in flight. It
+  # answers: "Do SLOs hold when 128 users are continuously active?" Throughput
+  # is measured rather than targeted; AutoTuner therefore evaluates this mode
+  # at the configured stream count without rate reduction.
+  # load:
+  # kind: concurrent
+  # streams: 128
+  #
+  # To test fixed active users instead, replace this mapping with:
+  # load: {kind: concurrent, streams: 128}
+  load:
+    kind: throughput
+    max_concurrency: 128
+  max_rate_finding_attempts: 3
+  rate_decrease_factor: 0.3
+  # Each name is min_<GuideLLM metric> or max_<GuideLLM metric>.
+  slos:
+    min_success_rate: 0.99
+    max_ttft_p99_ms: 1500
+    max_e2e_p99_ms: 8000
+  # Optional pass-through GuideLLM arguments. `sample_size: 0` avoids retaining
+  # full request payloads in benchmark JSON while retaining all statistics.
+  guidellm_options:
+    sample_size: 0
+    arguments:
+      tokenizer: {kind: huggingface_auto, model: *model}
+
+engine:
+  name: vllm
+  image: vllm/vllm-openai:latest
+  devices: ["0"] # NVIDIA GPU indexes; omit this when using docker.devices below.
+  # Optional Docker runtime arguments (for example, when using ROCm instead of
+  # the NVIDIA GPU index above): devices, group_add, security_opt, environment,
+  # ipc_mode, and shm_size.
+  # docker:
+  #   devices: ["/dev/kfd:/dev/kfd:rwm", "/dev/dri:/dev/dri:rwm"]
+  #   group_add: ["993"]
+  #   security_opt: ["seccomp=unconfined"]
+  #   environment: {ROCR_VISIBLE_DEVICES: "0,1"}
+  base_args:
+    - --model
+    - *model
+    - --port
+    - *port
+    - --max-model-len
+    - "8192"
+    - --gpu-memory-utilization
+    - "0.95"
+  value_args_pool:
+    max-num-seqs: [64, 128, 256]
+    max-num-batched-tokens: [2048, 4096, 8192]
+  action_args_pool: {}
+
+# To benchmark real multimodal or tool-calling requests, replace or add data
+# descriptors. GuideLLM supports repeated --data descriptors, so multiple kinds
+# can be combined in a single chat request. For dataset-backed tool calls use
+# the form below; examples/guidellm-tool-calls.yaml is the complete recipe.
+#
+# backend: {kind: openai_http, request_format: /v1/chat/completions}
+# data:
+#   - kind: json_file
+#     path: /absolute/path/to/tool-calls.jsonl
+#     # Required on guidellm 0.7.3: file loaders return a DatasetDict and the
+#     # column mapper crashes without an explicit split.
+#     load_kwargs: {split: train}
+# guidellm_options:
+#   arguments:
+#     # `messages` is not a default prompt column name, and column_mappings
+#     # replaces the defaults wholesale, so `tools` must be listed too.
+#     data-column-mapper:
+#       kind: generative_column_mapper
+#       column_mappings: {text_column: messages, tools_column: tools}
+#     data-preprocessor: {kind: tool_calling_message_extractor}
+#
+# The vLLM server must also be configured for the model's tool parser, e.g.
+# --enable-auto-tool-choice --tool-call-parser <model-specific-parser>.

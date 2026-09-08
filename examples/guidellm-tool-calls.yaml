@@ -1,0 +1,80 @@
+# Tool-calling capacity test. The model/parser pairing is an example; choose the
+# parser documented by vLLM for the model actually being served.
+model: &model "NousResearch/Hermes-3-Llama-3.1-8B"
+port: &port 8000
+instance_info:
+  gpu_type: Nvidia L40S
+  gpu_count: 1
+
+scenario:
+  name: tool-calls
+  # Chat completions are required because OpenAI tool definitions are carried
+  # in chat-completion requests.
+  backend:
+    kind: openai_http
+    request_format: /v1/chat/completions
+    # Caps generation so the end-to-end SLO below measures bounded responses.
+    max_tokens: 128
+  data:
+    # Each JSONL record supplies messages and tools. The preprocessor below
+    # converts these records to GuideLLM requests.
+    - kind: json_file
+      # Use an absolute path: the descriptor is forwarded verbatim to GuideLLM
+      # and resolved against the current directory, and the tuner copies this
+      # config into the results directory.
+      path: /absolute/path/to/tool-calls.jsonl
+      # Required on guidellm 0.7.3: file loaders return a DatasetDict and the
+      # column mapper crashes without an explicit split.
+      load_kwargs: {split: train}
+  load:
+    kind: throughput
+    max_concurrency: 32
+  constraints:
+    - kind: max_duration
+      seconds: 60
+  rate_constraints:
+    - kind: max_duration
+      seconds: 30
+  max_rate_finding_attempts: 3
+  rate_decrease_factor: 0.25
+  slos:
+    min_success_rate: 0.99
+    max_ttft_p99_ms: 1500
+    max_e2e_p99_ms: 6000
+  guidellm_options:
+    sample_size: 20
+    arguments:
+      # `messages` is not a default prompt column name, and column_mappings
+      # replaces the defaults wholesale, so `tools` must be listed too.
+      data-column-mapper:
+        kind: generative_column_mapper
+        column_mappings:
+          text_column: messages
+          tools_column: tools
+      data-preprocessor:
+        kind: tool_calling_message_extractor
+      tokenizer:
+        kind: huggingface_auto
+        model: *model
+
+engine:
+  name: vllm-tool-calls
+  image: vllm/vllm-openai:latest
+  devices: ["0"]
+  base_args:
+    - --model
+    - *model
+    - --port
+    - *port
+    # These flags are required for automatic tool selection. Check vLLM's
+    # tool-calling docs for the parser appropriate to a different model.
+    - --enable-auto-tool-choice
+    - --tool-call-parser
+    - hermes
+    - --max-model-len
+    - "8192"
+    - --gpu-memory-utilization
+    - "0.95"
+  value_args_pool:
+    max-num-seqs: [16, 32, 64]
+  action_args_pool: {}

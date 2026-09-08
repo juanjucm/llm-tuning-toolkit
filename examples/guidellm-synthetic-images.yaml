@@ -1,0 +1,52 @@
+# Synthetic image + text capacity test for a vision-language model. GuideLLM
+# combines repeated data descriptors into one multimodal chat request.
+model: &model "Qwen/Qwen2.5-VL-7B-Instruct"
+port: &port 8000
+instance_info:
+  gpu_type: Nvidia L40S
+  gpu_count: 1
+
+scenario:
+  name: synthetic-images
+  data:
+    - kind: synthetic_text
+      prompt_tokens: 128
+      output_tokens: 128
+    # GuideLLM generates images locally; replace this descriptor with a
+    # json_file/huggingface dataset descriptor to benchmark real images.
+    - kind: synthetic_image
+      width: 512
+      height: 512
+  load:
+    kind: concurrent
+    streams: 8
+  constraints:
+    - kind: max_duration
+      seconds: 60
+  slos:
+    min_success_rate: 0.99
+    max_ttft_p99_ms: 2500
+    max_e2e_p99_ms: 10000
+  guidellm_options:
+    sample_size: 20
+    arguments:
+      tokenizer:
+        kind: huggingface_auto
+        model: *model
+
+engine:
+  name: vllm-vision
+  image: vllm/vllm-openai:latest
+  devices: ["0"]
+  base_args:
+    - --model
+    - *model
+    - --port
+    - *port
+    - --max-model-len
+    - "8192"
+    - --gpu-memory-utilization
+    - "0.95"
+  value_args_pool:
+    max-num-seqs: [4, 8, 16]
+  action_args_pool: {}

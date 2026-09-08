@@ -16,6 +16,7 @@ venv/
 # IDE
 .idea/
 .vscode/
+.tokensave/
 
 # Testing
 .pytest_cache/
