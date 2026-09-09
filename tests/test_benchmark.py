@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -76,22 +77,25 @@ class BenchmarkSuiteTests(unittest.TestCase):
         benchmark_names: tuple[str, ...] = (),
         include_tags: tuple[str, ...] = (),
         exclude_tags: tuple[str, ...] = (),
+        hf_token: str | None = None,
     ) -> BenchmarkSuite:
         config_path = Path(directory) / "suite.yaml"
         config_path.write_text(yaml.safe_dump(config or suite_data(), sort_keys=False))
-        return BenchmarkSuite(
-            str(config_path),
-            recipe="vllm-l40s-fp8",
-            target="http://serving.internal:8000",
-            model="org/model",
-            result_dir=directory,
-            context_window=context_window,
-            capabilities=capabilities,
-            benchmark_names=benchmark_names,
-            include_tags=include_tags,
-            exclude_tags=exclude_tags,
-            show_console=False,
-        )
+        environment = {"HF_TOKEN": hf_token} if hf_token is not None else {}
+        with patch.dict(os.environ, environment, clear=True):
+            return BenchmarkSuite(
+                str(config_path),
+                recipe="vllm-l40s-fp8",
+                target="http://serving.internal:8000",
+                model="org/model",
+                result_dir=directory,
+                context_window=context_window,
+                capabilities=capabilities,
+                benchmark_names=benchmark_names,
+                include_tags=include_tags,
+                exclude_tags=exclude_tags,
+                show_console=False,
+            )
 
     def test_caller_managed_recipe_runs_without_deployment_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -129,6 +133,27 @@ class BenchmarkSuiteTests(unittest.TestCase):
             persisted = json.loads(Path(summary["report_path"]).read_text())
             self.assertEqual(persisted["recipe"], "vllm-l40s-fp8")
             self.assertNotIn("engine", persisted)
+
+    def test_exported_hf_token_authenticates_the_endpoint_without_leaking_into_results(self):
+        with tempfile.TemporaryDirectory() as directory:
+            token = "hf_private_endpoint_token"
+            runner = self.create_runner(
+                directory,
+                benchmark_names=("high-concurrency",),
+                hf_token=token,
+            )
+            runner.guidellm = Mock()
+            runner.guidellm.run_points.return_value = [measured_point(1, 4.0, 100.0)]
+
+            summary = runner.run()
+
+            backend = runner.guidellm.run_points.call_args.kwargs["backend"]
+            self.assertEqual(backend["api_key"], token)
+            self.assertEqual(
+                summary["authentication"],
+                {"kind": "huggingface_token", "enabled": True},
+            )
+            self.assertNotIn(token, Path(summary["report_path"]).read_text())
 
     def test_model_traits_enable_only_applicable_optional_workloads(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -176,15 +201,20 @@ class BenchmarkSuiteTests(unittest.TestCase):
             )
             self.assertEqual(summary["benchmarks"][0]["error"], "backend rejected requests")
 
-    def test_suite_cannot_override_caller_target_or_model(self):
-        with tempfile.TemporaryDirectory() as directory:
-            config = suite_data()
-            config["backend"]["target"] = "http://wrong.example"
-            config_path = Path(directory) / "suite.yaml"
-            config_path.write_text(yaml.safe_dump(config, sort_keys=False))
+    def test_suite_cannot_override_runtime_backend_credentials_or_routing(self):
+        for field, value in (
+            ("target", "http://wrong.example"),
+            ("model", "wrong/model"),
+            ("api_key", "hardcoded-secret"),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                config = suite_data()
+                config["backend"][field] = value
+                config_path = Path(directory) / "suite.yaml"
+                config_path.write_text(yaml.safe_dump(config, sort_keys=False))
 
-            with self.assertRaisesRegex(ValueError, "caller-supplied"):
-                load_suite(config_path)
+                with self.assertRaisesRegex(ValueError, "runtime-supplied"):
+                    load_suite(config_path)
 
     def test_production_example_is_valid_and_model_aware(self):
         example = Path(__file__).parents[1] / "examples" / "guidellm-recipe-benchmark.yaml"

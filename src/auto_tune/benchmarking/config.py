@@ -141,10 +141,10 @@ class BenchmarkCase(BaseModel):
             raise ValueError("guidellm_options.arguments must be a mapping")
         if "constraint" in arguments or "constraints" in arguments:
             raise ValueError("use constraints, not guidellm_options.arguments.constraint")
-        forbidden_backend_fields = {"target", "model"} & self.backend.keys()
+        forbidden_backend_fields = {"target", "model", "api_key"} & self.backend.keys()
         if forbidden_backend_fields:
             fields = ", ".join(sorted(forbidden_backend_fields))
-            raise ValueError(f"backend fields are caller-supplied and may not appear in the suite: {fields}")
+            raise ValueError(f"backend fields are runtime-supplied and may not appear in the suite: {fields}")
         return self
 
 
@@ -169,10 +169,10 @@ class BenchmarkSuiteConfig(BaseModel):
         names = [benchmark.name for benchmark in self.benchmarks]
         if len(names) != len(set(names)):
             raise ValueError("benchmark names must be unique")
-        forbidden_backend_fields = {"target", "model"} & self.backend.keys()
+        forbidden_backend_fields = {"target", "model", "api_key"} & self.backend.keys()
         if forbidden_backend_fields:
             fields = ", ".join(sorted(forbidden_backend_fields))
-            raise ValueError(f"backend fields are caller-supplied and may not appear in the suite: {fields}")
+            raise ValueError(f"backend fields are runtime-supplied and may not appear in the suite: {fields}")
         arguments = self.guidellm_options.get("arguments", {})
         if not isinstance(arguments, dict):
             raise ValueError("guidellm_options.arguments must be a mapping")

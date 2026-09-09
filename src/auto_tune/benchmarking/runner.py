@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import shutil
 import sys
@@ -49,6 +50,7 @@ class BenchmarkSuite:
         self.suite = load_suite(config_path)
         self.recipe = recipe
         self.target = target.rstrip("/")
+        self.hf_token = os.getenv("HF_TOKEN") or None
         self.model_profile = ModelProfile(
             model=model,
             context_window=context_window,
@@ -97,6 +99,10 @@ class BenchmarkSuite:
             "recipe": self.recipe,
             "target": self.target,
             "model": self.model_profile.model_dump(mode="json"),
+            "authentication": {
+                "kind": "huggingface_token",
+                "enabled": self.hf_token is not None,
+            },
             "selection": {
                 "benchmark_names": sorted(self.benchmark_names),
                 "include_tags": sorted(self.include_tags),
@@ -160,13 +166,16 @@ class BenchmarkSuite:
         return result
 
     def _backend(self, benchmark: BenchmarkCase) -> dict[str, Any]:
-        return {
+        backend = {
             "kind": "openai_http",
             **self.suite.backend,
             **benchmark.backend,
             "target": self.target,
             "model": self.model_profile.model,
         }
+        if self.hf_token is not None:
+            backend["api_key"] = self.hf_token
+        return backend
 
     def _guidellm_options(self, benchmark: BenchmarkCase) -> dict[str, Any]:
         options = deepcopy(self.suite.guidellm_options)

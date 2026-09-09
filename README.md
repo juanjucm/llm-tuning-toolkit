@@ -40,6 +40,19 @@ The YAML file contains only reusable GuideLLM benchmark policy. Target and model
 fields are rejected in the suite so a checked-in suite cannot silently redirect
 a workflow.
 
+For a private Hugging Face endpoint, expose `HF_TOKEN` to the job:
+
+```bash
+export HF_TOKEN=hf_...
+uv run recipe-benchmark ...
+```
+
+The benchmark runner reads `HF_TOKEN` and sets GuideLLM's `openai_http`
+`api_key`; GuideLLM therefore sends `Authorization: Bearer <HF_TOKEN>` for both
+backend validation and benchmark requests. The token is never written to
+`benchmark_results.json`. `target`, `model`, and `api_key` are runtime-owned and
+are rejected if they appear in the suite YAML.
+
 [`examples/guidellm-recipe-benchmark.yaml`](examples/guidellm-recipe-benchmark.yaml)
 is the production suite. It covers:
 
