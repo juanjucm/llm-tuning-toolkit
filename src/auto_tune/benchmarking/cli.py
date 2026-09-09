@@ -44,6 +44,13 @@ def benchmark(
         str,
         typer.Option("--model", help="Model served by the target endpoint."),
     ],
+    tokenizer_model: Annotated[
+        str | None,
+        typer.Option(
+            "--tokenizer-model",
+            help="Hugging Face tokenizer repository; defaults to the endpoint model identifier.",
+        ),
+    ] = None,
     result_dir: Annotated[
         Path,
         typer.Option("--result-dir", file_okay=False, help="Directory in which to save benchmark results."),
@@ -96,6 +103,7 @@ def benchmark(
         recipe=recipe,
         target=target,
         model=model,
+        tokenizer_model=tokenizer_model,
         result_dir=str(result_dir),
         context_window=context_window,
         capabilities=capability or (),

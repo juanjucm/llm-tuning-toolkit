@@ -32,6 +32,7 @@ class BenchmarkSuite:
         recipe: str,
         target: str,
         model: str,
+        tokenizer_model: str | None = None,
         result_dir: str = "out",
         context_window: int | None = None,
         capabilities: Iterable[str] = (),
@@ -53,6 +54,7 @@ class BenchmarkSuite:
         self.hf_token = os.getenv("HF_TOKEN") or None
         self.model_profile = ModelProfile(
             model=model,
+            tokenizer_model=tokenizer_model or model,
             context_window=context_window,
             capabilities=frozenset(capabilities),
         )
@@ -188,10 +190,10 @@ class BenchmarkSuite:
         if tokenizer is None:
             arguments["tokenizer"] = {
                 "kind": "huggingface_auto",
-                "model": self.model_profile.model,
+                "model": self.model_profile.tokenizer_model,
             }
         elif isinstance(tokenizer, dict) and tokenizer.get("kind") == "huggingface_auto":
-            arguments["tokenizer"] = {**tokenizer, "model": self.model_profile.model}
+            arguments["tokenizer"] = {**tokenizer, "model": self.model_profile.tokenizer_model}
         options["arguments"] = arguments
         return options
 

@@ -53,6 +53,16 @@ backend validation and benchmark requests. The token is never written to
 `benchmark_results.json`. `target`, `model`, and `api_key` are runtime-owned and
 are rejected if they appear in the suite YAML.
 
+When the endpoint advertises a local path or serving alias rather than a Hub
+model ID, pass the tokenizer repository separately:
+
+```bash
+uv run recipe-benchmark \
+  --model /repository/model.gguf \
+  --tokenizer-model google/model \
+  ...
+```
+
 [`examples/guidellm-recipe-benchmark.yaml`](examples/guidellm-recipe-benchmark.yaml)
 is the production suite. It covers:
 

@@ -14,7 +14,7 @@ backend:
 guidellm_options:
   sample_size: 0
   arguments:
-    random_seed: 42
+    seed: {kind: static, value: 42}
 
 benchmarks:
   - name: latency-baseline

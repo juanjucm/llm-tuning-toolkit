@@ -1344,7 +1344,7 @@ requires-dist = [
     { name = "gradio", specifier = "==6.25.0" },
     { name = "gradio-client", specifier = "==2.6.0" },
     { name = "groovy", specifier = "==0.1.2" },
-    { name = "guidellm", extras = ["recommended", "vision"], specifier = ">=0.7.3,<0.8" },
+    { name = "guidellm", extras = ["recommended", "vision"], specifier = "==0.7.3" },
     { name = "h11", specifier = "==0.14.0" },
     { name = "httpcore", specifier = "==1.0.7" },
     { name = "httpx", specifier = "==0.28.1" },

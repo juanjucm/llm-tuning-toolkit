@@ -22,6 +22,7 @@ class ModelProfile(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     model: str = Field(min_length=1)
+    tokenizer_model: str = Field(min_length=1)
     context_window: PositiveInt | None = None
     capabilities: frozenset[str] = Field(default_factory=frozenset)
 

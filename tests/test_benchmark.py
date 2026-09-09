@@ -27,7 +27,7 @@ def suite_data() -> dict:
         "name": "production",
         "description": "Serving characterization",
         "backend": {"kind": "openai_http", "request_format": "/v1/chat/completions"},
-        "guidellm_options": {"sample_size": 0, "arguments": {"random_seed": 42}},
+        "guidellm_options": {"sample_size": 0, "arguments": {"seed": {"kind": "static", "value": 42}}},
         "benchmarks": [
             {
                 "name": "high-concurrency",
@@ -72,6 +72,7 @@ class BenchmarkSuiteTests(unittest.TestCase):
         directory: str,
         *,
         config: dict | None = None,
+        tokenizer_model: str | None = None,
         context_window: int | None = 8192,
         capabilities: tuple[str, ...] = (),
         benchmark_names: tuple[str, ...] = (),
@@ -88,6 +89,7 @@ class BenchmarkSuiteTests(unittest.TestCase):
                 recipe="vllm-l40s-fp8",
                 target="http://serving.internal:8000",
                 model="org/model",
+                tokenizer_model=tokenizer_model,
                 result_dir=directory,
                 context_window=context_window,
                 capabilities=capabilities,
@@ -99,7 +101,7 @@ class BenchmarkSuiteTests(unittest.TestCase):
 
     def test_caller_managed_recipe_runs_without_deployment_configuration(self):
         with tempfile.TemporaryDirectory() as directory:
-            runner = self.create_runner(directory)
+            runner = self.create_runner(directory, tokenizer_model="org/tokenizer")
             runner.guidellm = Mock()
             runner.guidellm.run_points.return_value = [
                 measured_point(1, 4.0, 100.0),
@@ -128,7 +130,7 @@ class BenchmarkSuiteTests(unittest.TestCase):
             )
             self.assertEqual(
                 call["options"]["arguments"]["tokenizer"],
-                {"kind": "huggingface_auto", "model": "org/model"},
+                {"kind": "huggingface_auto", "model": "org/tokenizer"},
             )
             persisted = json.loads(Path(summary["report_path"]).read_text())
             self.assertEqual(persisted["recipe"], "vllm-l40s-fp8")
@@ -252,6 +254,8 @@ class BenchmarkCliTests(unittest.TestCase):
                         "https://serving.example/v1",
                         "--model",
                         "org/model",
+                        "--tokenizer-model",
+                        "org/tokenizer",
                         "--context-window",
                         "32768",
                         "--capability",
@@ -274,6 +278,7 @@ class BenchmarkCliTests(unittest.TestCase):
             recipe="recipe-42",
             target="https://serving.example/v1",
             model="org/model",
+            tokenizer_model="org/tokenizer",
             result_dir=directory,
             context_window=32768,
             capabilities=["vision"],
