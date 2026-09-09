@@ -25,6 +25,119 @@ Install dependencies with -e for dev mode:
 ```bash
 uv pip install -e .
 ```
+## Benchmark an already deployed recipe
+
+Use `recipe-benchmark` when a workflow has already selected and deployed a
+serving recipe. This path does not read engine arguments, start containers, or
+search for a better recipe. The caller supplies:
+
+- a recipe identifier for result attribution;
+- the OpenAI-compatible target URL;
+- the served model;
+- optional model traits used to select applicable workloads.
+
+The YAML file contains only reusable GuideLLM benchmark policy. Target and model
+fields are rejected in the suite so a checked-in suite cannot silently redirect
+a workflow.
+
+[`examples/guidellm-recipe-benchmark.yaml`](examples/guidellm-recipe-benchmark.yaml)
+is the production suite. It covers:
+
+- single-stream latency baseline;
+- closed-loop concurrency from 1 to 128 active streams;
+- an open-loop Poisson capacity sweep;
+- long-context prefill;
+- decode-heavy generation;
+- extended reasoning generation when the caller declares `reasoning`; and
+- image-plus-text concurrency when the caller declares `vision`.
+
+Every load profile has deterministic randomization, warmup/cooldown exclusion,
+bounded request counts, early error-rate termination, and success-rate
+evaluation. Raw GuideLLM reports remain the metric source of truth.
+
+Run the core text suite against an existing deployment:
+
+```bash
+uv run recipe-benchmark \
+  --config examples/guidellm-recipe-benchmark.yaml \
+  --recipe vllm-l40s-fp8 \
+  --target http://serving.internal:8000 \
+  --model meta-llama/Llama-3.1-8B-Instruct \
+  --context-window 131072 \
+  --result-dir out
+```
+
+Declare model capabilities to enable applicable optional cases:
+
+```bash
+uv run recipe-benchmark \
+  --config examples/guidellm-recipe-benchmark.yaml \
+  --recipe vllm-qwen-vl \
+  --target http://serving.internal:8000 \
+  --model Qwen/Qwen2.5-VL-7B-Instruct \
+  --context-window 32768 \
+  --capability vision
+```
+
+`--benchmark` selects exact case names. `--include-tag` and `--exclude-tag`
+filter groups such as `core`, `long-context`, or `optional`; each option is
+repeatable. Unknown benchmark names and an entirely empty selection fail before
+GuideLLM starts.
+
+Model-aware selection is declared per benchmark:
+
+```yaml
+- name: long-context-prefill
+  description: Prefill latency with 16K-28K token prompts.
+  tags: [core, long-context, prefill]
+  selection:
+    min_context_window: 32768
+    capabilities: [text]       # optional
+    model_patterns: ["org/*"]  # optional glob
+    excluded_model_patterns: ["*/legacy-*"]
+  data: [...]
+  profile: {kind: concurrent, streams: [1, 2, 4, 8]}
+  constraints: [{kind: max_requests, count: 100}]
+```
+
+If a case requires a context window or capability that the caller did not
+provide, the case is recorded as `skipped` with the exact reason. `selection.enabled:
+false` statically disables a case.
+
+The same contract is available as a Python API:
+
+```python
+from auto_tune.benchmarking import BenchmarkSuite
+
+summary = BenchmarkSuite(
+    "examples/guidellm-recipe-benchmark.yaml",
+    recipe="vllm-l40s-fp8",
+    target="http://serving.internal:8000",
+    model="meta-llama/Llama-3.1-8B-Instruct",
+    context_window=131072,
+    capabilities={"reasoning"},
+    exclude_tags={"vision"},
+).run()
+```
+
+Each run stores the copied suite, one raw GuideLLM JSON report per executed
+case, and `benchmark_results.json` under:
+
+```text
+out/<suite>/<recipe>/run_<timestamp>_<id>/
+```
+
+The consolidated report records caller inputs, executed and skipped cases,
+concrete load points, normalized metrics, and optional SLO verdicts. One case
+failing does not suppress later cases; the CLI exits non-zero after recording
+the complete result. SLO misses remain benchmark data and do not change the exit
+code.
+
+Benchmark code lives under `auto_tune.benchmarking`: typed suite configuration
+and selection in `config.py`, execution/reporting in `runner.py`, and workflow
+arguments in `cli.py`. It shares GuideLLM normalization and SLO evaluation with
+auto-tune, but no deployment lifecycle or tuning policy.
+
 ## Auto Tuning Usage
 
 This module provides a way to automatically detect the best LLM serving configuration that maximises throughput while being complient with a set of defined goodput criteria.

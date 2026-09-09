@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from auto_tune.display import AutoTuneDisplay
 from auto_tune.display_format import format_workload
-from auto_tune.guidellm import GuideLLMRunner, extract_all_metrics, extract_metrics
+from auto_tune.guidellm import GuideLLMRunner, extract_all_metrics, extract_all_results, extract_metrics
 from auto_tune.terminal import TerminalScreen
 from auto_tune.tuner import AutoTuner, evaluate_slos
 
@@ -265,7 +265,7 @@ class GuideLLMAdapterTests(unittest.TestCase):
         tuner.display = None
         container = Mock(status="running")
 
-        with patch("auto_tune.tuner.requests.get", return_value=SimpleNamespace(status_code=200)) as get:
+        with patch("auto_tune.engine.requests.get", return_value=SimpleNamespace(status_code=200)) as get:
             self.assertTrue(tuner._wait_for_server_ready(container, 30000, timeout=1))
 
         get.assert_called_once_with("http://localhost:30000/health_generate", timeout=5)
@@ -383,6 +383,30 @@ class GuideLLMAdapterTests(unittest.TestCase):
         # The percentile set is GuideLLM's, so p75 is reachable and p60 does not exist.
         self.assertIn("ttft_p75_ms", metrics)
         self.assertNotIn("ttft_p60_ms", metrics)
+
+    def test_extract_all_results_labels_each_concrete_load_point(self):
+        point = benchmark(18.0, 20.0)
+        point.config = SimpleNamespace(
+            strategy=SimpleNamespace(
+                model_dump=Mock(
+                    return_value={
+                        "type_": "concurrent",
+                        "streams": 64,
+                        "max_concurrency": 64,
+                    }
+                )
+            )
+        )
+        report = SimpleNamespace(benchmarks=[point])
+
+        with patch("auto_tune.guidellm.GenerativeBenchmarksReport.model_validate", return_value=report):
+            results = extract_all_results({"metadata": {"version": 2}})
+
+        self.assertEqual(
+            results[0]["load"],
+            {"kind": "concurrent", "streams": 64, "max_concurrency": 64},
+        )
+        self.assertEqual(results[0]["metrics"]["throughput"], 18.0)
 
     def test_lower_load_point_wins_when_the_saturated_one_misses_slos(self):
         report = SimpleNamespace(benchmarks=[benchmark(40.0, 900.0), benchmark(10.0, 100.0)])

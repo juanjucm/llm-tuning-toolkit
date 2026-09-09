@@ -79,6 +79,7 @@ dependencies = [
 
 [project.scripts]
 auto-tune = "auto_tune.cli:main"
+recipe-benchmark = "auto_tune.benchmarking.cli:main"
 
 [dependency-groups]
 dev = [

@@ -1,0 +1,178 @@
+# Reusable GuideLLM suite for an endpoint deployed by the caller. Model, recipe,
+# target URL, context window, and capabilities are runtime API/CLI arguments.
+name: production-serving
+
+description: >-
+  Production characterization across latency, closed-loop concurrency,
+  open-loop capacity, long-context prefill, decode-heavy generation, and
+  optional multimodal workloads.
+
+backend:
+  kind: openai_http
+  request_format: /v1/chat/completions
+
+guidellm_options:
+  sample_size: 0
+  arguments:
+    random_seed: 42
+
+benchmarks:
+  - name: latency-baseline
+    description: Single-stream latency floor without concurrency pressure.
+    tags: [core, latency, text]
+    data:
+      - kind: synthetic_text
+        prompt_tokens: 512
+        prompt_tokens_min: 256
+        prompt_tokens_max: 1024
+        output_tokens: 128
+        output_tokens_min: 64
+        output_tokens_max: 256
+    profile:
+      kind: synchronous
+      warmup: {mode: prefer_requests, percent: 0.05}
+      cooldown: {mode: prefer_requests, percent: 0.05}
+    constraints:
+      - {kind: max_requests, count: 200}
+      - {kind: max_error_rate, rate: 0.05}
+    slos: {min_success_rate: 0.99}
+
+  - name: interactive-concurrency
+    description: Closed-loop chat clients across increasing active concurrency.
+    tags: [core, concurrency, text]
+    data:
+      - kind: synthetic_text
+        prompt_tokens: 1024
+        prompt_tokens_min: 256
+        prompt_tokens_max: 4096
+        output_tokens: 256
+        output_tokens_min: 64
+        output_tokens_max: 512
+    profile:
+      kind: concurrent
+      streams: [1, 8, 32, 64, 128]
+      rampup_duration: 10
+      warmup: {mode: prefer_requests, percent: 0.05}
+      cooldown: {mode: prefer_requests, percent: 0.05}
+    constraints:
+      - {kind: max_requests, count: 1000}
+      - {kind: max_error_rate, rate: 0.05}
+    slos: {min_success_rate: 0.99}
+
+  - name: open-loop-capacity
+    description: Poisson arrival-rate sweep from latency floor through saturation.
+    tags: [core, capacity, open-loop, text]
+    data:
+      - kind: synthetic_text
+        prompt_tokens: 1024
+        prompt_tokens_min: 256
+        prompt_tokens_max: 4096
+        output_tokens: 256
+        output_tokens_min: 64
+        output_tokens_max: 512
+    profile:
+      kind: sweep
+      strategy_type: poisson
+      sweep_size: 8
+      max_concurrency: 256
+      rampup_duration: 10
+      warmup: {mode: prefer_requests, percent: 0.05}
+      cooldown: {mode: prefer_requests, percent: 0.05}
+    constraints:
+      - {kind: max_requests, count: 1000}
+      - {kind: max_error_rate, rate: 0.05}
+    slos: {min_success_rate: 0.99}
+
+  - name: long-context-prefill
+    description: Prefill latency and throughput with 16K-28K token prompts.
+    tags: [core, long-context, prefill, text]
+    selection:
+      min_context_window: 32768
+    data:
+      - kind: synthetic_text
+        prompt_tokens: 24576
+        prompt_tokens_min: 16384
+        prompt_tokens_max: 28672
+        output_tokens: 128
+        output_tokens_min: 64
+        output_tokens_max: 256
+    profile:
+      kind: concurrent
+      streams: [1, 2, 4, 8]
+      rampup_duration: 5
+      warmup: {mode: prefer_requests, percent: 0.05}
+      cooldown: {mode: prefer_requests, percent: 0.05}
+    constraints:
+      - {kind: max_requests, count: 100}
+      - {kind: max_error_rate, rate: 0.05}
+    slos: {min_success_rate: 0.99}
+
+  - name: generation-heavy
+    description: Decode throughput and inter-token latency under long generations.
+    tags: [core, generation, decode, text]
+    data:
+      - kind: synthetic_text
+        prompt_tokens: 512
+        prompt_tokens_min: 128
+        prompt_tokens_max: 1024
+        output_tokens: 1024
+        output_tokens_min: 512
+        output_tokens_max: 2048
+    profile:
+      kind: concurrent
+      streams: [1, 4, 16, 32]
+      rampup_duration: 5
+      warmup: {mode: prefer_requests, percent: 0.05}
+      cooldown: {mode: prefer_requests, percent: 0.05}
+    constraints:
+      - {kind: max_requests, count: 200}
+      - {kind: max_error_rate, rate: 0.05}
+    slos: {min_success_rate: 0.99}
+
+  - name: reasoning-generation
+    description: Extended decode characterization for reasoning-oriented models.
+    tags: [optional, reasoning, generation, text]
+    selection:
+      min_context_window: 16384
+      capabilities: [reasoning]
+    data:
+      - kind: synthetic_text
+        prompt_tokens: 1024
+        prompt_tokens_min: 512
+        prompt_tokens_max: 2048
+        output_tokens: 4096
+        output_tokens_min: 2048
+        output_tokens_max: 8192
+    profile:
+      kind: concurrent
+      streams: [1, 2, 4, 8]
+      rampup_duration: 5
+      warmup: {mode: prefer_requests, percent: 0.05}
+      cooldown: {mode: prefer_requests, percent: 0.05}
+    constraints:
+      - {kind: max_requests, count: 50}
+      - {kind: max_error_rate, rate: 0.05}
+    slos: {min_success_rate: 0.99}
+
+  - name: vision-chat
+    description: Synthetic 1024x1024 image plus text concurrency for vision models.
+    tags: [optional, vision, multimodal]
+    selection:
+      capabilities: [vision]
+    data:
+      - kind: synthetic_text
+        prompt_tokens: 128
+        output_tokens: 128
+      - kind: synthetic_image
+        width: 1024
+        height: 1024
+    profile:
+      kind: concurrent
+      streams: [1, 2, 4, 8]
+      rampup_duration: 5
+      warmup: {mode: prefer_requests, percent: 0.05}
+      cooldown: {mode: prefer_requests, percent: 0.05}
+    constraints:
+      - {kind: max_requests, count: 100}
+      - {kind: max_error_rate, rate: 0.05}
+    slos: {min_success_rate: 0.99}

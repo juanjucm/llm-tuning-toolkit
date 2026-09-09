@@ -13,13 +13,14 @@ from typing import Dict, List, Optional, Tuple
 
 import coloredlogs
 import docker
-import requests
 import yaml
 from guidellm.benchmark.profiles import ProfileFactory
 from huggingface_hub import HfApi
 
 from auto_tune.display import AutoTuneDisplay
+from auto_tune.engine import DockerEngineRuntime, engine_parallel_arguments
 from auto_tune.guidellm import GuideLLMError, GuideLLMRunner, metric_names
+from auto_tune.slos import evaluate_slos
 from auto_tune.tracking import TrackioTracker
 
 coloredlogs.install()
@@ -39,35 +40,6 @@ UNSUPPORTED_LOAD_KINDS = {
     "use 'throughput' with scenario.max_rate_finding_attempts",
 }
 
-_ENGINE_PARALLEL_ARGUMENTS = {
-    "vllm": {"tp": "tensor_parallel_size", "dp": "data_parallel_size"},
-    "sglang": {"tp": "tp_size", "dp": "dp_size"},
-}
-_ENGINE_DEFAULT_ENTRYPOINTS = {
-    "sglang": ["python3", "-m", "sglang.launch_server"],
-}
-_ENGINE_DEFAULT_HEALTH_PATHS = {
-    "vllm": "/health",
-    "sglang": "/health_generate",
-}
-
-
-def _engine_family(engine_config: Dict) -> str:
-    """Return the engine implementation while allowing descriptive run names."""
-    configured = str(engine_config.get("kind") or engine_config.get("name", "vllm")).lower()
-    for family in _ENGINE_PARALLEL_ARGUMENTS:
-        if configured == family or configured.startswith((f"{family}-", f"{family}_")):
-            return family
-    return configured
-
-
-def _engine_health_path(engine_config: Dict) -> str:
-    """Return an overrideable readiness endpoint for the configured engine."""
-    path = str(
-        engine_config.get("health_path")
-        or _ENGINE_DEFAULT_HEALTH_PATHS.get(_engine_family(engine_config), "/health")
-    )
-    return f"/{path.lstrip('/')}"
 
 
 class _DisplayLogHandler(logging.Handler):
@@ -85,30 +57,7 @@ class _DisplayLogHandler(logging.Handler):
         self.display.log(message, record.levelname)
 
 
-def evaluate_slos(slos: Dict, metrics: Dict) -> Tuple[List[Dict], bool]:
-    """Compare metrics against min_/max_ SLO thresholds.
-
-    Names are validated when the config loads, so the errors raised here only fire
-    for a hand-built SLO mapping.
-    """
-    results = []
-    for threshold_name, threshold_value in slos.items():
-        if not threshold_name.startswith(("min_", "max_")):
-            raise ValueError(f"SLO '{threshold_name}' must start with min_ or max_")
-        metric_name = threshold_name[4:]
-        if metric_name not in metrics:
-            raise ValueError(f"SLO '{threshold_name}' refers to unsupported metric '{metric_name}'")
-        metric_value = metrics[metric_name]
-        if threshold_name.startswith("max_"):
-            meets = metric_value <= threshold_value
-        else:
-            meets = metric_value >= threshold_value
-        results.append({threshold_name: threshold_value, metric_name: metric_value, "meets": meets})
-
-    return results, all(result["meets"] for result in results)
-
-
-class AutoTuner:
+class AutoTuner(DockerEngineRuntime):
     def __init__(
         self,
         config_path: str,
@@ -342,132 +291,6 @@ class AutoTuner:
             raise ValueError(f"{name} items must be GuideLLM constraint mappings or descriptors")
         return value
 
-    def _build_engine_args(self, param_config: Dict) -> List[str]:
-        """
-        Build engine arguments from configuration.
-
-        Args:
-            param_config (Dict): Dictionary with 'value_args' and 'action_args'.
-        Returns:
-            List[str]: List of command-line arguments for the engine.
-        """
-        args = list(self.config["engine"]["base_args"])
-
-        # Handle value arguments (--param value)
-        for param, value in param_config.get("value_args", {}).items():
-            args.extend([f"--{param.replace('_', '-')}", str(value)])
-
-        # Handle action arguments (boolean flags)
-        for param, value in param_config.get("action_args", {}).items():
-            if value:
-                args.append(f"--{param.replace('_', '-')}")
-
-        return args
-
-    def _launch_docker_engine(self, engine_args: List[str]) -> Optional[docker.models.containers.Container]:
-        """
-        Launch a Docker container running the engine.
-        Args:
-            engine_args (List[str]): List of engine arguments.
-        Returns:
-            Optional[docker.models.containers.Container]: Docker container instance or None if failed.
-        """
-        try:
-            engine_config = self.config["engine"]
-            port = self.config["port"]
-
-            container_name = f"autotune_engine_{uuid.uuid4().hex[:8]}"
-            self.logger.info(f"Starting engine container: {container_name}")
-
-            docker_config = engine_config.get("docker", {})
-            docker_args = {
-                key: value
-                for key, value in docker_config.items()
-                if key in {"devices", "group_add", "security_opt", "ipc_mode"}
-            }
-            if "devices" in engine_config:
-                docker_args["device_requests"] = [
-                    docker.types.DeviceRequest(device_ids=engine_config["devices"], capabilities=[["gpu"]])
-                ]
-            environment = {
-                "HF_TOKEN": self.hf_token,
-                "HF_HUB_CACHE": "/data/",
-                **docker_config.get("environment", {}),
-            }
-
-            run_args = {
-                "image": engine_config["image"],
-                "command": [str(argument) for argument in engine_args],
-                "shm_size": docker_config.get("shm_size", "2g"),
-                "environment": environment,
-                "volumes": {self.cache_dir: {"bind": "/data/", "mode": "rw"}},
-                "ports": {f"{port}/tcp": port},
-                "detach": True,
-                "name": container_name,
-                "stop_signal": "SIGTERM",
-                **docker_args,
-            }
-            entrypoint = engine_config.get("entrypoint")
-            if entrypoint is None:
-                entrypoint = _ENGINE_DEFAULT_ENTRYPOINTS.get(_engine_family(engine_config))
-            if entrypoint is not None:
-                run_args["entrypoint"] = entrypoint
-
-            container = self.docker_client.containers.run(**run_args)
-
-            return container
-
-        except Exception as e:
-            self.logger.error(f"Failed to launch engine: {e}")
-            return None
-
-    def _wait_for_server_ready(self, container, port: int, timeout: int = 700) -> bool:
-        """
-        Wait for the server to be ready to accept requests.
-        Args:
-            port (int): Port number where the server is expected to be listening.
-            timeout (int): Maximum time to wait in seconds.
-        Returns:
-            bool: True if server is ready, False if timeout occurs.
-        """
-        self.logger.info("Waiting for engine to be ready...")
-        self._set_display_status("Waiting for engine health check")
-        start_time = time.time()
-        while time.time() - start_time < timeout:
-            try:
-                # check if container is still running
-                container.reload()
-                if container.status != "running":
-                    self.logger.error("Engine container has stopped unexpectedly.")
-                    return False
-
-                health_path = _engine_health_path(self.config["engine"])
-                response = requests.get(f"http://localhost:{port}{health_path}", timeout=5)
-                if response.status_code == 200:
-                    self.logger.info("Engine is ready!")
-                    self._set_display_status("Engine ready")
-                    return True
-            except requests.RequestException:
-                pass
-            time.sleep(2)
-
-        self.logger.error("Timeout waiting for engine to be ready")
-        return False
-
-    def _cleanup_container(self, container: docker.models.containers.Container) -> None:
-        """Stop and remove an engine container without blocking the remaining sweep."""
-        self._set_display_status("Stopping engine")
-        try:
-            self.logger.info("Stopping container...")
-            container.stop(timeout=100)
-        except Exception as error:
-            self.logger.warning("Error stopping container; forcing removal: %s", error)
-
-        try:
-            self.logger.info("Removing container...")
-            container.remove(force=True)
-        except Exception as error:
-            self.logger.warning("Error removing container: %s", error)
 
     def _run_throughput_benchmark(self, run_id: str, output_folder: str) -> Optional[List[Dict]]:
         """Run the production load benchmark and return every load point it measured.
@@ -657,12 +480,11 @@ class AutoTuner:
                 # Handle special case for tp-dp-combinations
                 if "tp-dp-combinations" in combination["value_args"].keys():
                     tp_dp_comb = combination["value_args"].pop("tp-dp-combinations")
-                    family = _engine_family(engine_config)
-                    parallel_args = _ENGINE_PARALLEL_ARGUMENTS.get(family)
+                    parallel_args = engine_parallel_arguments(engine_config)
                     if parallel_args is None:
                         raise ValueError(
                             "engine.value_args_pool.tp-dp-combinations is only supported for "
-                            f"vllm and sglang, not '{family}'"
+                            f"vllm and sglang, not '{engine_config.get('kind') or engine_config['name']}'"
                         )
                     combination["value_args"][parallel_args["tp"]] = tp_dp_comb["tp"]
                     combination["value_args"][parallel_args["dp"]] = tp_dp_comb["dp"]

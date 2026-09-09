@@ -89,18 +89,36 @@ def _normalize(result: Any) -> dict[str, float]:
     return normalized
 
 
-def extract_all_metrics(report: dict[str, Any]) -> list[dict[str, float]]:
-    """Normalize every benchmark in a GuideLLM v0.7 report, by ascending throughput.
-
-    The GuideLLM report schema is the source of truth here. In particular,
-    request latency is recorded in seconds while TTFT and ITL are milliseconds.
-    """
+def _parse_report(report: dict[str, Any]) -> GenerativeBenchmarksReport:
     try:
         parsed = GenerativeBenchmarksReport.model_validate(report)
     except Exception as error:
         raise GuideLLMError(f"Could not parse GuideLLM JSON report: {error}") from error
     if not parsed.benchmarks:
         raise GuideLLMError("GuideLLM report contains no benchmark entries")
+    return parsed
+
+
+def _load_config(result: Any) -> dict[str, Any]:
+    """Expose the concrete load attached to a GuideLLM benchmark result."""
+    strategy = result.config.strategy.model_dump(exclude_none=True)
+    return {"kind": strategy.pop("type_"), **strategy}
+
+
+def extract_all_results(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return normalized metrics with the concrete load for every benchmark point."""
+    parsed = _parse_report(report)
+    points = [{"load": _load_config(entry), "metrics": _normalize(entry)} for entry in parsed.benchmarks]
+    return sorted(points, key=lambda point: point["metrics"]["throughput"])
+
+
+def extract_all_metrics(report: dict[str, Any]) -> list[dict[str, float]]:
+    """Normalize every benchmark in a GuideLLM v0.7 report, by ascending throughput.
+
+    The GuideLLM report schema is the source of truth here. In particular,
+    request latency is recorded in seconds while TTFT and ITL are milliseconds.
+    """
+    parsed = _parse_report(report)
     # A concurrent profile reports one benchmark per configured stream count. SLO
     # evaluation needs all of them: the most saturated point is the one most likely
     # to violate a latency SLO, so collapsing to it discards the configurations
@@ -134,6 +152,34 @@ class GuideLLMRunner:
     ) -> dict[str, float]:
         """Run one benchmark and return its highest-throughput load point."""
         return extract_metrics(
+            self._execute(
+                target=target,
+                data=data,
+                profile=profile,
+                constraints=constraints,
+                output_path=output_path,
+                backend=backend,
+                options=options,
+                on_output=on_output,
+                show_console=show_console,
+            )
+        )
+
+    def run_points(
+        self,
+        *,
+        target: str,
+        data: list[dict[str, Any] | str],
+        profile: dict[str, Any],
+        constraints: list[dict[str, Any] | str],
+        output_path: Path,
+        backend: dict[str, Any] | str | None = None,
+        options: dict[str, Any] | None = None,
+        on_output: Callable[[str], None] | None = None,
+        show_console: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Run one benchmark and retain each point's concrete load parameters."""
+        return extract_all_results(
             self._execute(
                 target=target,
                 data=data,
